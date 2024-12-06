@@ -51,7 +51,7 @@ class NaiveOCP:
             #     for i in obstacles:
             #         opti.subject_to(opti.bounded(i['lb'],ee_pos[i['axis']],i['ub']))
             # Floor
-            opti.subject_to(opti.bounded(0,ee_pos[2],1e6)) 
+            #opti.subject_to(opti.bounded(0,ee_pos[2],1e6)) 
             # Ceil
             # opti.subject_to(opti.bounded(-1e-6,ee_pos[2],0.6))
             # Wall
@@ -108,32 +108,35 @@ class AccBoundsOCP(NaiveOCP):
 
     def additionalSetting(self):
         nq = self.model.nq
-        #ddq_max = np.ones(self.model.nv) * self.ddq_max
-        # dq_min = - self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
-        # dq_max = self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
+        ddq_max = np.ones(self.model.nv) * 10.
+        
+        # dqq_min = - self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
+        # dqq_max = self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
+        # self.opti.subject_to(dqq_min >= self.model.x_min[:nq])        
+        # self.opti.subject_to(dqq_max <= self.model.x_max[:nq])
+
         dq_min = -cs.sqrt(2*ddq_max[:nq]*(self.X[-1][:nq]-self.model.x_min[:nq])+0*1e-4)
         dq_max = cs.sqrt(2*ddq_max[:nq]*(self.model.x_max[:nq]-self.X[-1][:nq])+0*1e-4)
+        #dq_min = 2*ddq_max[:nq]*(self.X[-1][:nq]-self.model.x_min[:nq])
         
         self.opti.set_initial(self.X[-1],x0)
-        self.opti.subject_to(dq_min <= self.X[-1][nq:])
+        #self.opti.subject_to(cs.if_else(self.X[-1][nq:] < np.zeros(robot.nq) , dq_min <= self.X[-1][nq:]**2, cs.fabs(self.X[-1][nq:]) <  np.ones(robot.nq)*1e6))
         self.opti.subject_to(dq_max >= self.X[-1][nq:])
-        # if obstacles != None:
-        #     for i in obstacles:
-        #         dx_max = cs.sqrt(2*ddx_max[i['axis']]*cs.fabs(robot.ee_fun(self.X[-1])[i['axis']]- i['pos']))  
-        #         self.opti.subject_to(self.opti.bounded(-dx_max,    (robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:])[i['axis']],    dx_max))
+        self.opti.subject_to(dq_min <= self.X[-1][nq:])
+
 
 
         # cartesian velocity constraint
         # floor
-        dx_max1 = cs.sqrt(2*ddx_max*self.model.ee_fun(self.X[-1])[2]) 
-        self.opti.subject_to(self.opti.bounded(-dx_max1,         robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:],            dx_max1))
+        # dx_max1 = cs.sqrt(2*ddx_max*self.model.ee_fun(self.X[-1])[2]) 
+        # self.opti.subject_to(self.opti.bounded(-dx_max1,         robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:],            dx_max1))
         # # # ceil
         # dx_max2 = cs.sqrt(2*ddx_max*cs.fabs(self.model.ee_fun(self.X[-1])[2]-0.6)) 
         # self.opti.subject_to(self.opti.bounded(-dx_max2,         robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:],            dx_max2))
-        #wall
+        # wall
         # dx_max3 = cs.sqrt(2*ddx_max*cs.fabs(self.model.ee_fun(self.X[-1])[2]-0.5)) 
         # self.opti.subject_to(self.opti.bounded(-dx_max3,         robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:],            dx_max3))
-        self.opti.cost = 0
+        # self.opti.cost = 0
 
 def check_cartesian_constraint(state, obstacles):
     check = True
@@ -148,6 +151,18 @@ def check_cartesian_constraint(state, obstacles):
 def sample_state():
     # bound_l = robot.x_min/1.1
     # bound_h = robot.x_max/1.1
+    # while True:
+    #     check = True
+    #     x_sampled = np.array((robot.x_max-robot.x_min)*np.random.random_sample((robot.nx,)) + robot.x_min*np.ones((robot.nx,)))
+    #     #x_sampled = np.array((bound_h-bound_l)*np.random.random_sample((robot.nx,)) + bound_l*np.ones((robot.nx,)))
+    #     for i in range(robot.nq):        
+    #         check = check and x_sampled[robot.nq+i]/ddq_max[i] + x_sampled[i] <= robot.x_max[i]
+    #     for i in range(robot.nq):        
+    #         check = check and x_sampled[robot.nq+i]/ddq_max[i] - x_sampled[i] <= -robot.x_min[i]
+    #     if check:
+    #         return x_sampled
+        
+
     while True:
         x_sampled = np.array((robot.x_max-robot.x_min)*np.random.random_sample((robot.nx,)) + robot.x_min*np.ones((robot.nx,)))
         #x_sampled = np.array((bound_h-bound_l)*np.random.random_sample((robot.nx,)) + bound_l*np.ones((robot.nx,)))
@@ -158,15 +173,15 @@ def sample_state():
             sign = random.choice([-1, 1])
             if sign > 0:
                 x_sampled[robot.nq+i] = np.sqrt(2*ddq_max[i]*(robot.x_max[i]-x_sampled[i]))
-                if x_sampled[robot.nq+i] > robot.x_max[i+robot.nq]:
-                    x_sampled[robot.nq+i] = robot.x_max[i+robot.nq]
+                if x_sampled[robot.nq+i] > robot.x_max[robot.nq+i]:
+                    x_sampled[robot.nq+i] = robot.x_max[robot.nq+i]
             else:
                 x_sampled[robot.nq+i] = -np.sqrt(2*ddq_max[i]*(x_sampled[i]-robot.x_min[i]))
-                if x_sampled[robot.nq+i] < robot.x_min[i+robot.nq]:
-                    x_sampled[robot.nq+i] = robot.x_min[i+robot.nq]
+                if x_sampled[robot.nq+i] < robot.x_min[robot.nq+i]:
+                    x_sampled[robot.nq+i] = robot.x_min[robot.nq+i]
+        # if 1*robot.ee_fun(x_sampled)[2]>=0 and 0*robot.ee_fun(x_sampled)[2]<=0.6 and 0*robot.ee_fun(x_sampled)[0]<=0.5:
+        #     return x_sampled
         return x_sampled
-        if 1*robot.ee_fun(x_sampled)[2]>=0 and 0*robot.ee_fun(x_sampled)[2]<=0.6 and 0*robot.ee_fun(x_sampled)[0]<=0.5:
-            return x_sampled
 
 # 0.03 quantile ddq 25, 31, 37
 # 0.03 quantile ddx_max 0.4, 0.65, 0.03

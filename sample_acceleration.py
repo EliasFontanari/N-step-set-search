@@ -6,6 +6,8 @@ import copy
 import random
 import tqdm
 import pickle 
+
+
 class MinAccProblem:
     """ Define OCP problem and solver (IpOpt) """
     def __init__(self, model, joint):   # joint 0<= joint <= nq : joint on which maximize acceleration, while keeping zero accleration to the other
@@ -29,7 +31,7 @@ class MinAccProblem:
         self.cost = U[-1][joint]
         # Dynamics constraint
         opti.subject_to(X[1] == model.f_fun(X[0], U[0]))
-        # Torque constraints
+        # Torque constraint
         opti.subject_to(opti.bounded(model.tau_min, model.tau_fun(X[0], U[0]), model.tau_max))
         for i in range(self.model.nq):
             if i!= joint:
@@ -86,7 +88,7 @@ class MaxAccProblem(MinAccProblem):
         self.cost = -U[-1][joint]
         # Dynamics constraint
         opti.subject_to(X[1] == model.f_fun(X[0], U[0]))
-        # Torque constraints
+        # Torque constraint
         opti.subject_to(opti.bounded(model.tau_min, model.tau_fun(X[0], U[0]), model.tau_max))
         for i in range(self.model.nq):
             if i!= joint:
@@ -106,7 +108,7 @@ if __name__ == "__main__":
     params = parser.Parameters('z1')
     robot = adam_model.AdamModel(params,n_dofs=3)
 
-    n_samples = 50000 # samples for each joint
+    n_samples = 100 # samples for each joint
     acc_max = [[] for _ in range(robot.nq)]
     acc_min = [[] for _ in range(robot.nq)]
     
@@ -128,8 +130,8 @@ if __name__ == "__main__":
                 sol = min_solver.solve()
                 acc_min[k].append(sol.value(min_problem.U[-1][k])) 
                 #print(sol.value(min_problem.U[-1][k]))
-                ddx_min = np.array(robot.jac(np.eye(4),sol.value(min_problem.X[0][:robot.nq]))[:3,6:]@sol.value(min_problem.X[0][robot.nq:]) + \
-                          robot.jac_dot(np.eye(4),sol.value(min_problem.X[0][:robot.nq]),np.zeros(6),sol.value(min_problem.X[0][robot.nq:]))[:3,6:]@sol.value(min_problem.U[-1]))
+                ddx_min = np.array(robot.jac(np.eye(4),sol.value(min_problem.X[0][:robot.nq]))[:3,6:]@sol.value(min_problem.U[-1])) + \
+                          robot.jac_dot(np.eye(4),sol.value(min_problem.X[0][:robot.nq]),np.zeros(6),sol.value(min_problem.X[0][robot.nq:]))[:3,6:]@sol.value(min_problem.X[0][robot.nq:])
                 acc_min_x[k].append(copy.copy(ddx_min))
                 progress_bar.update(1)
                 i+=1
@@ -149,8 +151,8 @@ if __name__ == "__main__":
                 sol = max_solver.solve()
                 acc_max[k].append(sol.value(max_problem.U[-1][k])) 
                 #print(sol.value(max_problem.U[-1][k]))
-                ddx_max = np.array(robot.jac(np.eye(4),sol.value(max_problem.X[0][:robot.nq]))[:3,6:]@sol.value(max_problem.X[0][robot.nq:]) + \
-                          robot.jac_dot(np.eye(4),sol.value(max_problem.X[0][:robot.nq]),np.zeros(6),sol.value(max_problem.X[0][robot.nq:]))[:3,6:]@sol.value(max_problem.U[-1]))
+                ddx_max = np.array(robot.jac(np.eye(4),sol.value(max_problem.X[0][:robot.nq]))[:3,6:]@sol.value(max_problem.U[-1])) + \
+                          robot.jac_dot(np.eye(4),sol.value(max_problem.X[0][:robot.nq]),np.zeros(6),sol.value(max_problem.X[0][robot.nq:]))[:3,6:]@sol.value(max_problem.X[0][robot.nq:])
                 acc_max_x[k].append(copy.copy(ddx_max))
                 progress_bar.update(1)
                 i+=1

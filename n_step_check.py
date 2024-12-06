@@ -78,7 +78,7 @@ class NaiveOCP:
         self.U = U
         self.x_init = x_init
         self.cost = cost
-        self.dist_b = dist_b
+        #self.dist_b = dist_b
         self.additionalSetting()
 
     def additionalSetting(self):
@@ -107,9 +107,9 @@ class NaiveOCP:
             'ipopt.compl_inf_tol': 1e-6,
             #'ipopt.hessian_approximation': 'limited-memory',
             # 'detect_simple_bounds': 'yes',
-            'ipopt.max_iter': self.params.nlp_max_iter,
+            'ipopt.max_iter': 1000,
             #'ipopt.linear_solver': 'ma57',
-            'ipopt.sb': 'yes'
+            'ipopt.sb': 'no'
         }
 
         opti.solver('ipopt', opts)
@@ -172,13 +172,14 @@ def sample_state(obstacles=None):
             sign = random.choice([-1, 1])
             if sign > 0:
                 x_sampled[robot.nq+i] = np.sqrt(2*ddq_max[i]*(robot.x_max[i]-x_sampled[i]))
-                if x_sampled[robot.nq+i] > robot.x_max[i+robot.nq]:
-                    x_sampled[robot.nq+i] = robot.x_max[i+robot.nq]
+                if x_sampled[robot.nq+i] > robot.x_max[robot.nq+i]:
+                    x_sampled[robot.nq+i] = robot.x_max[robot.nq+i]
             else:
                 x_sampled[robot.nq+i] = -np.sqrt(2*ddq_max[i]*(x_sampled[i]-robot.x_min[i]))
-                if x_sampled[robot.nq+i] < robot.x_min[i+robot.nq]:
-                    x_sampled[robot.nq+i] = robot.x_min[i+robot.nq]
-        # if robot.ee_fun(x_sampled)[2]>=0 and 0*robot.ee_fun(x_sampled)[2]<=0.6 and 0*robot.ee_fun(x_sampled)[0]<=0.5:
+                if x_sampled[robot.nq+i] < robot.x_min[robot.nq+i]:
+                    x_sampled[robot.nq+i] = robot.x_min[robot.nq+i]
+        # if robot.ee_fun(x_sampled)[2]>=0 and robot.ee_fun(x_sampled)[2]<=0.6 and robot.ee_fun(x_sampled)[0]<=0.5:
+        #     print(f"Do sampled state {x_sampled} respect check_cartesian_constraint? {True if check_cartesian_constraint(x_sampled,obstacles) else False }")
         #     return x_sampled
         if obstacles != None:
             if check_cartesian_constraint(x_sampled,obstacles):
@@ -195,7 +196,7 @@ if __name__ == "__main__":
     robot = adam_model.AdamModel(params,n_dofs=3)
 
     ddq_max = np.array([25,31,37])
-    ddx_max = np.array([0.4,0.65,0.03])
+    ddx_max = np.array([0.4, 0.65, 0.03])*1
 
     obstacles = [
     {'axis':2, 'lb':0, 'ub':1e6, 'pos':0 },
@@ -205,7 +206,7 @@ if __name__ == "__main__":
     #obstacles = None
 
     n_samples=100
-    max_n_steps = 30
+    max_n_steps = 40
     x0_successes = []
     x0_failed = []
 
