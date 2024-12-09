@@ -73,8 +73,8 @@ class AdamModel:
         joint_effort = np.array([joint.limit.effort for joint in robot_joints]) 
         #joint_effort = np.array([2., 23., 10., 4.])
 
-        self.tau_min = - joint_effort/2
-        self.tau_max = joint_effort/2
+        self.tau_min = - joint_effort*1
+        self.tau_max = joint_effort*1
         self.x_min = np.hstack([joint_lower, - joint_velocity])
         self.x_max = np.hstack([joint_upper, joint_velocity])
 

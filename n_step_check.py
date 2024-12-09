@@ -216,7 +216,7 @@ def sample_state(obstacles=None):
  
 if __name__ == "__main__":
 
-    params = parser.Parameters('z1')
+    params = parser.Parameters('ur10')
     robot = adam_model.AdamModel(params,n_dofs=3)
 
     ddq_max = np.array([25,31,37])*1
@@ -224,9 +224,9 @@ if __name__ == "__main__":
 
     obstacles = [
     {'axis':2, 'lb':0, 'ub':1e6, 'pos':0 },
-    {'axis':2, 'lb':-1e6, 'ub':0.6, 'pos':0.6},
+    {'axis':2, 'lb':-1e6, 'ub':0.2, 'pos':0.2},
     {'axis':0, 'lb':-1e6, 'ub':0.5, 'pos':0.5 },
-    {'axis':0, 'lb':-0.6, 'ub':1e5, 'pos':1e6 }
+    {'axis':0, 'lb':-0., 'ub':1e5, 'pos':-0. }
     ]
     #obstacles = None
 
