@@ -94,7 +94,7 @@ class NaiveOCP:
             # 'detect_simple_bounds': 'yes',
             'ipopt.max_iter': self.params.nlp_max_iter,
             #'ipopt.linear_solver': 'ma57',
-            'ipopt.sb': 'yes'
+            'ipopt.sb': 'no'
         }
 
         opti.solver('ipopt', opts)
@@ -108,21 +108,21 @@ class AccBoundsOCP(NaiveOCP):
 
     def additionalSetting(self):
         nq = self.model.nq
-        ddq_max = np.ones(self.model.nv) * 10.
+        #ddq_max = np.ones(self.model.nv) * 10.
         
-        # dqq_min = - self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
-        # dqq_max = self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
-        # self.opti.subject_to(dqq_min >= self.model.x_min[:nq])        
-        # self.opti.subject_to(dqq_max <= self.model.x_max[:nq])
+        dqq_min = -self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
+        dqq_max = self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
+        self.opti.subject_to(dqq_min >= self.model.x_min[:nq])        
+        self.opti.subject_to(dqq_max <= self.model.x_max[:nq])
 
-        dq_min = -cs.sqrt(2*ddq_max[:nq]*(self.X[-1][:nq]-self.model.x_min[:nq])+0*1e-4)
-        dq_max = cs.sqrt(2*ddq_max[:nq]*(self.model.x_max[:nq]-self.X[-1][:nq])+0*1e-4)
-        #dq_min = 2*ddq_max[:nq]*(self.X[-1][:nq]-self.model.x_min[:nq])
+        # dq_min = -cs.sqrt(2*ddq_max[:nq]*(self.X[-1][:nq]-self.model.x_min[:nq])+0*1e-4)
+        # dq_max = cs.sqrt(2*ddq_max[:nq]*(self.model.x_max[:nq]-self.X[-1][:nq])+0*1e-4)
+        # #dq_min = 2*ddq_max[:nq]*(self.X[-1][:nq]-self.model.x_min[:nq])
         
-        self.opti.set_initial(self.X[-1],x0)
-        #self.opti.subject_to(cs.if_else(self.X[-1][nq:] < np.zeros(robot.nq) , dq_min <= self.X[-1][nq:]**2, cs.fabs(self.X[-1][nq:]) <  np.ones(robot.nq)*1e6))
-        self.opti.subject_to(dq_max >= self.X[-1][nq:])
-        self.opti.subject_to(dq_min <= self.X[-1][nq:])
+        # self.opti.set_initial(self.X[-1],x0)
+        # #self.opti.subject_to(cs.if_else(self.X[-1][nq:] < np.zeros(robot.nq) , dq_min <= self.X[-1][nq:]**2, cs.fabs(self.X[-1][nq:]) <  np.ones(robot.nq)*1e6))
+        # self.opti.subject_to(dq_max >= self.X[-1][nq:])
+        # self.opti.subject_to(dq_min <= self.X[-1][nq:])
 
 
 
@@ -136,7 +136,7 @@ class AccBoundsOCP(NaiveOCP):
         # wall
         # dx_max3 = cs.sqrt(2*ddx_max*cs.fabs(self.model.ee_fun(self.X[-1])[2]-0.5)) 
         # self.opti.subject_to(self.opti.bounded(-dx_max3,         robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:],            dx_max3))
-        # self.opti.cost = 0
+        self.opti.cost = 0
 
 def check_cartesian_constraint(state, obstacles):
     check = True
@@ -192,6 +192,7 @@ if __name__ == "__main__":
     robot = adam_model.AdamModel(params,n_dofs=3)
 
     ddq_max = np.array([25,31,37])
+    #ddq_max = np.ones(robot.nv) * 10.
     ddx_max = np.array([0.4,0.65,0.03])
 
     # obstacles = [

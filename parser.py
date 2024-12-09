@@ -37,6 +37,8 @@ class Parameters:
         # temp solution
         if urdf_name == 'ur5':
             self.robot_urdf = f'{self.ROBOTS_DIR}/ur_description/urdf/{urdf_name}_robot.urdf'
+        elif urdf_name == 'ur10':
+            self.robot_urdf = f'{self.ROBOTS_DIR}ur_description/urdf/{urdf_name}_robot.urdf'
         else:
             self.robot_urdf = f'{self.ROBOTS_DIR}/{urdf_name}_description/urdf/{urdf_name}.urdf'
 
@@ -78,7 +80,10 @@ class Parameters:
         # For cartesian constraint
         self.obs_flag = bool(parameters['obs_flag'])
         self.abort_flag = bool(parameters['abort_flag'])
-        self.frame_name = 'gripperMover'       #  TODO: dependence on the robot
+        if urdf_name == 'z1':
+            self.frame_name = 'gripperMover'       #  TODO: dependence on the robot
+        elif 'ur' in urdf_name:
+            self.frame_name = 'ee_link'
 
         self.box_lb = np.array([0.45, -0.55, 0.])
         self.box_ub = np.array([0.75, -0.25, 0.3])

@@ -34,7 +34,6 @@ class NaiveOCP:
         Q = 1e2 * np.eye(3)
         R = 5e-3 * np.eye(self.model.nu)
         ee_ref = model.ee_ref
-        dist_b = []
         for k in range(n_steps+1):
 
             ee_pos = model.ee_fun(X[k])
@@ -72,7 +71,6 @@ class NaiveOCP:
             #             dist_b += [(ee_pos - obs['position']).T @ (ee_pos - obs['position'])]
             #             opti.subject_to(opti.bounded(lb, dist_b[-1], ub))
 
-        opti.minimize(cost)
         self.opti = opti
         self.X = X
         self.U = U
@@ -80,6 +78,8 @@ class NaiveOCP:
         self.cost = cost
         #self.dist_b = dist_b
         self.additionalSetting()
+        opti.minimize(cost)
+
 
     def additionalSetting(self):
         pass
@@ -122,7 +122,15 @@ class AccBoundsOCP(NaiveOCP):
 
     def additionalSetting(self):
         nq = self.model.nq
+
+        #ddq_max = np.ones(self.model.nv) * 10.
         #ddq_max = np.ones(self.model.nv) * self.ddq_max
+
+        # dqq_min = - self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
+        # dqq_max = self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
+        # self.opti.subject_to(dqq_min >= self.model.x_min[:nq])        
+        # self.opti.subject_to(dqq_max <= self.model.x_max[:nq])
+
         # dq_min = - self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
         # dq_max = self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
         dq_min = -cs.sqrt(2*ddq_max[:nq]*(self.X[-1][:nq]-self.model.x_min[:nq])+0*1e-4)
@@ -150,13 +158,16 @@ class AccBoundsOCP(NaiveOCP):
         self.opti.cost = 0
 
 def check_cartesian_constraint(state, obstacles):
-    check = True
-    for i in obstacles:
-        check = check and (i['lb'] <= robot.ee_fun(state)[i['axis']] <= i['ub'])
-    for i in obstacles:
-        dx_max = np.sqrt(2*ddx_max[i['axis']]*np.abs(robot.ee_fun(state)[i['axis']]- i['pos']))  
-        check = check and (-dx_max <= (robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:])[i['axis']] <= dx_max)
-    return check
+    if obstacles != None:
+        check = True
+        for i in obstacles:
+            check = check and (i['lb'] <= robot.ee_fun(state)[i['axis']] <= i['ub'])
+        for i in obstacles:
+            dx_max = np.sqrt(2*ddx_max[i['axis']]*np.abs(robot.ee_fun(state)[i['axis']]- i['pos']))  
+            check = check and (-dx_max <= (robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:])[i['axis']] <= dx_max)
+        return check
+    else:
+        return True
 
 
 def sample_state(obstacles=None):
@@ -166,7 +177,6 @@ def sample_state(obstacles=None):
         x_sampled = np.array((robot.x_max-robot.x_min)*np.random.random_sample((robot.nx,)) + robot.x_min*np.ones((robot.nx,)))
         #x_sampled = np.array((bound_h-bound_l)*np.random.random_sample((robot.nx,)) + bound_l*np.ones((robot.nx,)))
         
-        x_sampled[robot.nq:] = np.zeros(robot.nq)
         for i in range(robot.nq):
             # min/max velocity bound
             sign = random.choice([-1, 1])
@@ -178,7 +188,7 @@ def sample_state(obstacles=None):
                 x_sampled[robot.nq+i] = -np.sqrt(2*ddq_max[i]*(x_sampled[i]-robot.x_min[i]))
                 if x_sampled[robot.nq+i] < robot.x_min[robot.nq+i]:
                     x_sampled[robot.nq+i] = robot.x_min[robot.nq+i]
-        # if robot.ee_fun(x_sampled)[2]>=0 and robot.ee_fun(x_sampled)[2]<=0.6 and robot.ee_fun(x_sampled)[0]<=0.5:
+        # if robot.ee_fun(x_sampled)[2]>=0 and robot.ee_fun(x_sampled)[2]<=0.6 and robot.ee_fun(x_sampled)[0]<=0.5 and robot.ee_fun(x_sampled)[0]>=-0.6:
         #     print(f"Do sampled state {x_sampled} respect check_cartesian_constraint? {True if check_cartesian_constraint(x_sampled,obstacles) else False }")
         #     return x_sampled
         if obstacles != None:
@@ -186,6 +196,20 @@ def sample_state(obstacles=None):
                 return x_sampled
         else:
             return x_sampled
+
+# def sample_state(obstacles=None):
+#     # bound_l = robot.x_min/1.1
+#     # bound_h = robot.x_max/1.1
+#     while True:
+#         x_sampled = np.array((robot.x_max-robot.x_min)*np.random.random_sample((robot.nx,)) + robot.x_min*np.ones((robot.nx,)))
+        
+#         if obstacles != None:
+#             if (robot.x_min[:robot.nq] <= -x_sampled[robot.nq:] ** 2 / ddq_max + x_sampled[:robot.nq]).all() and \
+#                 (x_sampled[robot.nq:] ** 2 / ddq_max + x_sampled[:robot.nq] <= robot.x_max[:robot.nq]).all(): 
+#                 if check_cartesian_constraint(x_sampled,obstacles):
+#                     return x_sampled
+#         else:
+#             return x_sampled
 
 # 0.03 quantile ddq 25, 31, 37
 # 0.03 quantile ddx_max 0.4, 0.65, 0.03
@@ -195,13 +219,14 @@ if __name__ == "__main__":
     params = parser.Parameters('z1')
     robot = adam_model.AdamModel(params,n_dofs=3)
 
-    ddq_max = np.array([25,31,37])
+    ddq_max = np.array([25,31,37])*1
     ddx_max = np.array([0.4, 0.65, 0.03])*1
 
     obstacles = [
     {'axis':2, 'lb':0, 'ub':1e6, 'pos':0 },
-    {'axis':2, 'lb':-1e6, 'ub':0.7, 'pos':0.7},
-    {'axis':0, 'lb':-1e6, 'ub':0.6, 'pos':0.6 }
+    {'axis':2, 'lb':-1e6, 'ub':0.6, 'pos':0.6},
+    {'axis':0, 'lb':-1e6, 'ub':0.5, 'pos':0.5 },
+    {'axis':0, 'lb':-0.6, 'ub':1e5, 'pos':1e6 }
     ]
     #obstacles = None
 
