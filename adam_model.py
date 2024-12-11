@@ -70,11 +70,12 @@ class AdamModel:
         joint_lower = np.array([joint.limit.lower for joint in robot_joints])
         joint_upper = np.array([joint.limit.upper for joint in robot_joints])
         joint_velocity = np.array([joint.limit.velocity for joint in robot_joints]) 
-        joint_effort = np.array([joint.limit.effort for joint in robot_joints]) 
-        #joint_effort = np.array([2., 23., 10., 4.])
+        #joint_effort = np.array([joint.limit.effort for joint in robot_joints]) 
+        joint_effort = np.array([2., 23., 10., 4.])
+        joint_effort = joint_effort[:self.nq]
 
-        self.tau_min = - joint_effort*1
-        self.tau_max = joint_effort*1
+        self.tau_min = - joint_effort
+        self.tau_max = joint_effort
         self.x_min = np.hstack([joint_lower, - joint_velocity])
         self.x_max = np.hstack([joint_upper, joint_velocity])
 

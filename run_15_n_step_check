@@ -1,0 +1,26 @@
+#!/bin/bash
+
+
+CWD=$(pwd)
+
+# Define the path to your Python script
+PYTHON_SCRIPT="$CWD/n_step_check.py"
+
+# Loop to open 10 terminals
+for i in {1..10}
+do
+    # Open a new terminal and execute the Python script
+    # For GNOME Terminal
+    gnome-terminal -- bash -c "python3 $PYTHON_SCRIPT; exec bash"
+
+    # Uncomment the appropriate line for your terminal emulator:
+
+    # For KDE Konsole
+    # konsole -e "python3 $PYTHON_SCRIPT; exec bash"
+
+    # For XFCE Terminal
+    # xfce4-terminal -e "python3 $PYTHON_SCRIPT; exec bash"
+
+    # For macOS Terminal
+    # osascript -e "tell application \"Terminal\" to do script \"python3 $PYTHON_SCRIPT\""
+done

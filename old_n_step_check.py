@@ -181,7 +181,8 @@ def sample_state():
                     x_sampled[robot.nq+i] = robot.x_min[robot.nq+i]
         # if 1*robot.ee_fun(x_sampled)[2]>=0 and 0*robot.ee_fun(x_sampled)[2]<=0.6 and 0*robot.ee_fun(x_sampled)[0]<=0.5:
         #     return x_sampled
-        return x_sampled
+        if check_cartesian_constraint(x_sampled,obstacles):
+            return x_sampled
 
 # 0.03 quantile ddq 25, 31, 37
 # 0.03 quantile ddx_max 0.4, 0.65, 0.03
@@ -195,11 +196,11 @@ if __name__ == "__main__":
     #ddq_max = np.ones(robot.nv) * 10.
     ddx_max = np.array([0.4,0.65,0.03])
 
-    # obstacles = [
-    # {'axis':2, 'lb':0, 'ub':1e6, 'pos':0 },
-    # {'axis':2, 'lb':-1e6, 'ub':0.7, 'pos':0.7},
-    # {'axis':0, 'lb':-1e6, 'ub':0.6, 'pos':0.6 }
-    # ]
+    obstacles = [
+    {'axis':2, 'lb':0, 'ub':1e6, 'pos':0 },
+    {'axis':2, 'lb':-1e6, 'ub':0.7, 'pos':0.7},
+    {'axis':0, 'lb':-1e6, 'ub':0.6, 'pos':0.6 }
+    ]
     # obstacles = None
 
     n_samples=100

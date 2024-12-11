@@ -108,7 +108,7 @@ if __name__ == "__main__":
     params = parser.Parameters('z1')
     robot = adam_model.AdamModel(params,n_dofs=3)
 
-    n_samples = 10000 # samples for each joint
+    n_samples = 100000 # samples for each joint
     acc_max = [[] for _ in range(robot.nq)]
     acc_min = [[] for _ in range(robot.nq)]
     
