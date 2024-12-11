@@ -129,9 +129,9 @@ class AccBoundsOCP(NaiveOCP):
                     self.opti.subject_to(self.opti.bounded(-dx_max,    (robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:]) [i['axis']],    dx_max))
             if len(self.obstacles['objects'])>0:
                 for i in self.obstacles['objects']:
-                    dist_vec = (i['position'])-robot.ee_fun(self.X[-1])
-                    dx_max = cs.sqrt(2*ddx_max*cs.fabs(dist_vec)) 
-                    self.opti.subject_to(cs.fabs(cs.dot(robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:],dist_vec/cs.norm_1(dist_vec))) <= np.ones(3)*1e10)#  cs.dot(dx_max,dx_max))
+                    dist_vec_end = (i['position'])-robot.ee_fun(self.X[-1])
+                    dx_max = cs.sqrt(2*ddx_max*cs.fabs(dist_vec_end)) 
+                    self.opti.subject_to( cs.dot((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:]),dist_vec_end/cs.dot(dist_vec_end,dist_vec_end))<=cs.dot(dx_max,dx_max))
                     #self.opti.subject_to(self.opti.bounded(-dx_max,robot.jac(np.eye(4),self.X[-1][:robot.nq])[:3,6:]@self.X[-1][robot.nq:], dx_max))
 
 
@@ -265,8 +265,8 @@ if __name__ == "__main__":
                 break
             except:
                 #sol = ocp.solve()
-                #print(ocp.debug.value(ocp_form.X[-1]))
-                #ocp.debug.show_infeasibilities()
+                print(ocp.debug.value(ocp_form.X[-1]))
+                # ocp.debug.show_infeasibilities()
                 print(f"Failed in {horizon} steps")
                 if horizon >= max_n_steps:
                     x0_failed.append(copy.copy(x0))
