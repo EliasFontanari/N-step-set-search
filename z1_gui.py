@@ -117,6 +117,14 @@ T_floor = np.eye(4)
 T_floor[:3,3] = np.array([0.5,0,0])
 viz.viewer['world/obstacle/floor2'].set_transform(T_floor)
 
+sphere = meshcat.geometry.Sphere(0.05)
+viz.viewer['world/obstacle/sphere'].set_object(sphere)
+viz.viewer['world/obstacle/sphere'].set_property('color',[1, 0, 0, 1])
+viz.viewer['world/obstacle/sphere'].set_property('visible', True)
+T_obs = np.eye(4)
+T_obs[:3, 3] = np.array([0.3,0.3,0.3])
+viz.viewer['world/obstacle/sphere'].set_transform(T_obs)
+
 th_gui = threading.Thread(target=create_gui)
 th_gui.start()
 
