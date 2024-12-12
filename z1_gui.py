@@ -122,7 +122,7 @@ viz.viewer['world/obstacle/sphere'].set_object(sphere)
 viz.viewer['world/obstacle/sphere'].set_property('color',[1, 0, 0, 1])
 viz.viewer['world/obstacle/sphere'].set_property('visible', True)
 T_obs = np.eye(4)
-T_obs[:3, 3] = np.array([0.3,0.3,0.3])
+T_obs[:3, 3] = np.array([0.,0.3,0.15])
 viz.viewer['world/obstacle/sphere'].set_transform(T_obs)
 
 th_gui = threading.Thread(target=create_gui)

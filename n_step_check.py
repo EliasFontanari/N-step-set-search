@@ -57,7 +57,7 @@ class NaiveOCP:
                         opti.subject_to(opti.bounded(i['lb'],ee_pos[i['axis']],i['ub']))
                 if len(obstacles['objects']):
                     for i in obstacles['objects']:
-                        opti.subject_to(cs.dot((ee_pos-i['position']),(ee_pos-i['position']))>=i['radius'])
+                        opti.subject_to(cs.dot((ee_pos-i['position']),(ee_pos-i['position']))>i['radius']**2)
 
         self.opti = opti
         self.X = X
@@ -125,7 +125,7 @@ class AccBoundsOCP(NaiveOCP):
         if self.obstacles != None:
             if len(self.obstacles['walls'])>0:
                 for i in self.obstacles['walls']:
-                    distance=robot.ee_fun(self.X[-1])[i['axis']]- i['pos']
+                    distance= i['pos'] - robot.ee_fun(self.X[-1])[i['axis']]
                     dx_max = cs.sqrt(2*ddx_max[i['axis']]*cs.fabs(distance))   #  [i['axis']]
                     self.opti.subject_to((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:])[i['axis']]*cs.sign(distance) <= dx_max)
                     # dx_max = cs.sqrt(2*ddx_max[i['axis']]*cs.fabs(robot.ee_fun(self.X[-1])[i['axis']]- i['pos']))   #  [i['axis']]
@@ -134,7 +134,7 @@ class AccBoundsOCP(NaiveOCP):
                 for i in self.obstacles['objects']:
                     dist_vec_end = (i['position'])-robot.ee_fun(self.X[-1])
                     dx_max = cs.sqrt(2*ddx_max*cs.fabs(dist_vec_end)) 
-                    self.opti.subject_to( cs.dot((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:]),dist_vec_end/cs.norm_2(dist_vec_end))<=cs.norm_2(dx_max))
+                    self.opti.subject_to(cs.dot((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:]),dist_vec_end/cs.norm_2(dist_vec_end))<=cs.norm_2(dx_max))
                     #self.opti.subject_to(self.opti.bounded(-dx_max,robot.jac(np.eye(4),self.X[-1][:robot.nq])[:3,6:]@self.X[-1][robot.nq:], dx_max))
 
 
@@ -158,10 +158,10 @@ def check_cartesian_constraint(state, obstacles):
         if len(obstacles['walls'])>0:
             for i in obstacles['walls']:
                 check = check and (i['lb'] <= robot.ee_fun(state)[i['axis']] <= i['ub'])
-                distance = robot.ee_fun(state)[i['axis']]- i['pos']
+                distance = i['pos'] -robot.ee_fun(state)[i['axis']]
                 dx_max = np.sqrt(2*ddx_max[i['axis']]*np.abs(distance))
-                check = check and ((robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:])[i['axis']])*np.sign(distance) <= dx_max
-                #check = check and (-dx_max <= ((robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:])[i['axis']])*np.sign(distance) <= dx_max)
+                #check = check and ((robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:])[i['axis']])*np.sign(distance) <= dx_max
+                check = check and (((robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:])[i['axis']])*np.sign(distance) <= dx_max)
                     
 
         if len(obstacles['objects'])>0:
@@ -229,8 +229,8 @@ if __name__ == "__main__":
     params = parser.Parameters('z1')
     robot = adam_model.AdamModel(params,n_dofs=3)
 
-    ddq_max = np.array([0.18,3,5])
-    ddx_max = np.array([0.05, 0.05, 0.05])*1
+    ddq_max = np.array([0.18,3,5])*2
+    ddx_max = np.array([0.05, 0.05, 0.05])*2
 
     regularization_sqrt = 1e-6 
 
@@ -244,14 +244,12 @@ if __name__ == "__main__":
 
     # objects modeled as spheres
     objects = [
-        {'position':[0.3,0.3,0.3], 'radius':0.05}
+        {'position':[0.,0.3,0.15], 'radius':0.05}
     ]
 
-    obstacles = {'walls':walls,'objects':[]}
-    #obstacles = {'walls':[],'objects':objects}
-    obstacles = None
+    obstacles = {'walls':walls,'objects':objects}
 
-    n_samples=100000
+    n_samples=10000
     max_n_steps = 40
     x0_successes = []
     x0_failed = []
