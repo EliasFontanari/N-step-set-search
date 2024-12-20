@@ -6,7 +6,7 @@ import copy
 import random
 import tqdm
 import pickle 
-
+import datetime
 
 class MinAccProblem:
     """ Define OCP problem and solver (IpOpt) """
@@ -104,16 +104,18 @@ class MaxAccProblem(MinAccProblem):
         self.cost = - self.U[-1][self.joint]
         
 if __name__ == "__main__":
+    now = datetime.datetime.now()
 
     params = parser.Parameters('z1')
-    robot = adam_model.AdamModel(params,n_dofs=3)
+    robot = adam_model.AdamModel(params,n_dofs=4)
 
-    n_samples = 100000 # samples for each joint
+
+    n_samples = 50000 # samples for each joint
     acc_max = [[] for _ in range(robot.nq)]
     acc_min = [[] for _ in range(robot.nq)]
     
-    acc_min_x = [[] for _ in range(3)]
-    acc_max_x = [[] for _ in range(3)]
+    acc_min_x = [[] for _ in range(robot.nq)]
+    acc_max_x = [[] for _ in range(robot.nq)]
 
     progress_bar = tqdm.tqdm(total=n_samples*robot.nq*2, desc='Sampling started')
     for k in range(robot.nq):
@@ -159,13 +161,13 @@ if __name__ == "__main__":
             except:
                 print('failed')
                 
-
-    with open('min.pkl', 'wb') as file:
+    saving_date = str(datetime.datetime.now())
+    with open(saving_date+'min.pkl', 'wb') as file:
         pickle.dump(acc_min, file)
-    with open('max.pkl', 'wb') as file:
+    with open(saving_date+'max.pkl', 'wb') as file:
         pickle.dump(acc_max, file)
-    with open('ddx_min.pkl', 'wb') as file:
+    with open(saving_date+'ddx_min.pkl', 'wb') as file:
         pickle.dump(acc_min_x, file)
-    with open('ddx_max.pkl', 'wb') as file:
+    with open(saving_date+'ddx_max.pkl', 'wb') as file:
         pickle.dump(acc_max_x, file)
     progress_bar.close()

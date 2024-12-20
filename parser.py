@@ -52,7 +52,7 @@ class Parameters:
         self.N = int(parameters['N'])
         self.dt = float(parameters['dt'])
         self.alpha = float(parameters['alpha'])
-        self.act = 'tanh' if urdf_name == 'z1' else 'relu'
+        self.act = 'gelu' if urdf_name == 'z1' else 'relu'
 
         self.solver_type = 'SQP_RTI' if rti else 'SQP'
         self.solver_mode = parameters['solver_mode']
@@ -84,6 +84,8 @@ class Parameters:
             self.frame_name = 'gripperMover'       #  TODO: dependence on the robot
         elif 'ur' in urdf_name:
             self.frame_name = 'ee_link'
+        elif urdf_name == 'fr3':
+            self.frame_name = 'fr3_hand'
 
         self.box_lb = np.array([0.45, -0.55, 0.])
         self.box_ub = np.array([0.75, -0.25, 0.3])

@@ -9,6 +9,27 @@ from urdf_parser_py.urdf import URDF
 from neural_network import NeuralNetwork
 import casadi as cs
 from numpy.random import uniform
+from copy import deepcopy
+
+class NeuralNetwork(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size, activation=nn.ReLU(), ub=None):
+        super().__init__()
+        self.linear_stack = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            activation,
+            nn.Linear(hidden_size, hidden_size),
+            activation,
+            nn.Linear(hidden_size, hidden_size),
+            activation,
+            nn.Linear(hidden_size, output_size),
+            activation,
+        )
+        self.ub = ub if ub is not None else 1.0
+
+    def forward(self, x):
+        out = self.linear_stack(x) * self.ub
+        return out
+
 
 class AdamModel:
     def __init__(self, params, n_dofs=False):
@@ -23,10 +44,21 @@ class AdamModel:
         except ValueError:
             print(f'\nInvalid number of degrees of freedom! Must be > 1 and <= {len(robot.joints)}\n')
             exit()
-        robot_joints = robot.joints[1:n_dofs+1] if params.urdf_name == 'z1' else robot.joints[:n_dofs]
+        if (params.urdf_name == 'z1'):
+            robot_joints = robot.joints[1:n_dofs+1]  
+        elif params.urdf_name == 'fr3':
+            robot.joints.pop(0)
+            robot.joints.pop(8-1)
+            robot.joints.pop(9-2)
+            robot.joints.pop(10-3)
+            robot_joints =robot.joints[:n_dofs]
+            
+        else: robot_joints=robot.joints[:n_dofs]
+
         joint_names = [joint.name for joint in robot_joints]
         kin_dyn = KinDynComputations(params.robot_urdf, joint_names, robot.get_root())        
         kin_dyn.set_frame_velocity_representation(adam.Representations.MIXED_REPRESENTATION)
+        self.gravity = kin_dyn.gravity_term_fun()
         self.mass = kin_dyn.mass_matrix_fun()                           # Mass matrix
         self.bias = kin_dyn.bias_force_fun()                            # Nonlinear effects  
         # print(kin_dyn.rbdalgos.model.links.keys())
@@ -34,12 +66,13 @@ class AdamModel:
         self.jac = kin_dyn.jacobian_fun(params.frame_name)
         self.jac_dot = kin_dyn.jacobian_dot_fun(params.frame_name)
 
+
         nq = len(joint_names)
 
         self.x = MX.sym("x", nq * 2)
         self.x_dot = MX.sym("x_dot", nq * 2)
         self.u = MX.sym("u", nq)
-        self.p = MX.sym("p", 3)     # Cartesian EE position
+        self.p = MX.sym("p", 1)      # alpha
         # Double integrator
         self.f_disc = vertcat(
             self.x[:nq] + params.dt * self.x[nq:] + 0.5 * params.dt**2 * self.u,
@@ -59,6 +92,13 @@ class AdamModel:
         self.tau = self.mass(H_b, self.x[:nq])[6:, 6:] @ self.u + \
                    self.bias(H_b, self.x[:nq], np.zeros(6), self.x[nq:])[6:]
         self.tau_fun = Function('tau', [self.x, self.u], [self.tau])
+
+        self.f_forward = vertcat(
+            self.x[nq:],
+            cs.inv(self.mass(H_b, self.x[:nq])[6:, 6:]) 
+            @ (self.u - self.bias(H_b, self.x[:nq], np.zeros(6), self.x[nq:])[6:])
+        )
+        self.f_fun_forw = Function('f', [self.x, self.u], [self.f_forward])
 
         # EE position (global frame)
         T_ee = self.fk(np.eye(4), self.x[:nq])
@@ -88,7 +128,8 @@ class AdamModel:
         self.nn_func = None
 
         # Cartesian constraints
-        self.obs_add = '_obs' if params.obs_flag else ''
+        self.obs_string = '_obs' if params.obs_flag else ''
+
 
     
     def define_problem(self, conf):
@@ -193,6 +234,44 @@ class AdamModel:
 
     def jointToEE(self, x):
         return np.array(self.ee_fun(x))
+    
+    def setNNmodel(self):
+        nls = {
+            'relu': torch.nn.ReLU(),
+            'elu': torch.nn.ELU(),
+            'tanh': torch.nn.Tanh(),
+            'gelu': torch.nn.GELU(approximate='tanh'),
+            'silu': torch.nn.SiLU()
+        }
+        act = self.params.act
+        act_fun = nls[act]
+
+        if act in ['tanh']: #, 'sine']:
+            ub = max(self.x_max[self.nq:]) * np.sqrt(self.nq)
+        else:
+            ub = 1
+
+        model = NeuralNetwork(self.nx, 256, 1, act_fun, ub)
+        # print(model)
+        # print(f'{self.params.NN_DIR}{self.nq}dof_{act}{self.obs_string}.pt')
+        nn_data = torch.load(f'{self.params.NN_DIR}{self.nq}dof_{act}{self.obs_string}.pt',
+                             map_location=torch.device('cpu'))
+        model.load_state_dict(nn_data['model'])
+
+        x_cp = deepcopy(self.x)
+        x_cp[self.nq] += self.params.eps
+        vel_norm = norm_2(x_cp[self.nq:])
+        pos = (x_cp[:self.nq] - nn_data['mean']) / nn_data['std']
+        vel_dir = x_cp[self.nq:] / vel_norm
+        state = vertcat(pos, vel_dir)
+
+        self.l4c_model = l4c.L4CasADi(model,
+                                      device='cpu',
+                                      name=f'{self.params.urdf_name}_model',
+                                      build_dir=f'{self.params.GEN_DIR}nn_{self.params.urdf_name}')
+        self.nn_model = self.l4c_model(state) * (100 - self.params.alpha) / 100 - vel_norm
+        self.nn_func = Function('nn_func', [self.x], [self.nn_model])
+        self.nn_out = Function('out', [self.x], [self.l4c_model(state)])
 
 
 

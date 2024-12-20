@@ -7,6 +7,7 @@ import random
 import pickle
 import datetime
 import os
+import tqdm
 
 class NaiveOCP:
     """ Define OCP problem and solver (IpOpt) """
@@ -57,7 +58,7 @@ class NaiveOCP:
                         opti.subject_to(opti.bounded(i['lb'],ee_pos[i['axis']],i['ub']))
                 if len(obstacles['objects']):
                     for i in obstacles['objects']:
-                        opti.subject_to(cs.dot((ee_pos-i['position']),(ee_pos-i['position']))>i['radius']**2)
+                        opti.subject_to(cs.dot((ee_pos-i['position']),(ee_pos-i['position']))>=i['radius']**2)
 
         self.opti = opti
         self.X = X
@@ -65,8 +66,8 @@ class NaiveOCP:
         self.x_init = x_init
         self.cost = cost
         #self.dist_b = dist_b
-        opti.minimize(cost)
         self.additionalSetting()
+        opti.minimize(cost)
 
 
 
@@ -127,9 +128,9 @@ class AccBoundsOCP(NaiveOCP):
                 for i in self.obstacles['walls']:
                     distance= i['pos'] - robot.ee_fun(self.X[-1])[i['axis']]
                     dx_max = cs.sqrt(2*ddx_max[i['axis']]*cs.fabs(distance))   #  [i['axis']]
-                    self.opti.subject_to((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:])[i['axis']]*cs.sign(distance) <= dx_max)
-                    # dx_max = cs.sqrt(2*ddx_max[i['axis']]*cs.fabs(robot.ee_fun(self.X[-1])[i['axis']]- i['pos']))   #  [i['axis']]
-                    # self.opti.subject_to(self.opti.bounded(-dx_max,    (robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:]) [i['axis']],    dx_max))
+                    self.opti.subject_to(((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:])[i['axis']])*cs.sign(distance) <= dx_max)
+                    #dx_max = cs.sqrt(2*ddx_max[i['axis']]*cs.fabs(robot.ee_fun(self.X[-1])[i['axis']]- i['pos']))   #  [i['axis']]
+                    #self.opti.subject_to(self.opti.bounded(-dx_max,    (robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:]) [i['axis']],    dx_max))
             if len(self.obstacles['objects'])>0:
                 for i in self.obstacles['objects']:
                     dist_vec_end = (i['position'])-robot.ee_fun(self.X[-1])
@@ -200,8 +201,12 @@ def sample_state(obstacles=None):
         #     print(f"Do sampled state {x_sampled} respect check_cartesian_constraint? {True if check_cartesian_constraint(x_sampled,obstacles) else False }")
         #     return x_sampled
         if obstacles != None:
+            #if np.abs(np.linalg.det(robot.jac(np.eye(4),x_sampled[:robot.nq])[:3,6:])) > 1e-3:
+
             if check_cartesian_constraint(x_sampled,obstacles):
                 return x_sampled
+                # else:
+                #     continue
         else:
             return x_sampled
 
@@ -227,35 +232,41 @@ if __name__ == "__main__":
     np.random.seed(now.microsecond*now.second+now.minute) 
 
     params = parser.Parameters('z1')
-    robot = adam_model.AdamModel(params,n_dofs=3)
+    robot = adam_model.AdamModel(params,n_dofs=4)
 
-    ddq_max = np.array([0.18,3,5])*2
-    ddx_max = np.array([0.05, 0.05, 0.05])*2
+    ddq_max = np.array([0.3,3,5,7])/3
+    ddx_max = np.array([0.1, 0.1, 0.1])/0.3
 
-    regularization_sqrt = 1e-6 
+    regularization_sqrt = 1e-6
 
+    ee_radius = 0.075
     walls = [
-    {'axis':2, 'lb':0, 'ub':1e6, 'pos':0 },
-    {'axis':2, 'lb':-1e6, 'ub':0.5, 'pos':0.5},
-    {'axis':0, 'lb':-1e6, 'ub':0.5, 'pos':0.5 }
-    #{'axis':0, 'lb':-0., 'ub':1e5, 'pos':-0. }
+    {'axis':2, 'lb':0+ee_radius, 'ub':1e6, 'pos':0+ee_radius},
+    # {'axis':2, 'lb':-1e6, 'ub':0.5, 'pos':0.5},
+    # {'axis':0, 'lb':-1e6, 'ub':0.5, 'pos':0.5},
+    # {'axis':0, 'lb':-0.5, 'ub':1e5, 'pos':-0.5}
     ]
     #walls = None
 
     # objects modeled as spheres
     objects = [
-        {'position':[0.,0.3,0.15], 'radius':0.05}
+        {'position':[0.6, 0., 0.12], 'radius':0.12+ee_radius}
+        # {'position':[0.,0.3,0.15],'radius':0.05},
+        # {'position':[0.3,-0.35,0.25], 'radius':0.1}
     ]
 
     obstacles = {'walls':walls,'objects':objects}
+    #obstacles = None
 
-    n_samples=10000
+    n_samples=100000
     max_n_steps = 40
     x0_successes = []
     x0_failed = []
 
     print(f'joint bounds = {robot.x_min} , {robot.x_max} ')
 
+    
+    progress_bar = tqdm.tqdm(total=n_samples, desc='Progress')
     for k in range(n_samples):
         x0=sample_state(obstacles)
         horizon = 1
@@ -264,8 +275,12 @@ if __name__ == "__main__":
             ocp = ocp_form.instantiateProblem()
             ocp.set_value(ocp_form.x_init, x0)
             try:
+                if horizon == 35:
+                    pass
                 sol = ocp.solve()
                 print(f"Returned in {horizon} steps")
+                print(sol.value(ocp_form.X[-1]))
+                #print(f'determinant = {np.linalg.det(robot.jac(np.eye(4),x0[:robot.nq])[:3,6:])}')
                 x0_successes.append([copy.copy(x0),horizon])
                 break
             except:
@@ -278,17 +293,22 @@ if __name__ == "__main__":
                 if horizon >= max_n_steps:
                     x0_failed.append(copy.copy(x0))
                     print(x0)
-            if horizon >= 10: horizon +=5
-            else: horizon +=1
+            if horizon >= 10: horizon +=10
+            else: horizon +=3
+        progress_bar.update(1)
+        print(f'number of failures: {len(x0_failed)}')
+    progress_bar.close()
 
     print(len(x0_successes))
     folder = os.getcwd()+'/N-steps results'
     if not os.path.exists(folder):
         os.makedirs(folder)
 
-    saving_date = str(datetime.datetime.now())
+    saving_date = str(now)
     print(f'Failures: {len(x0_failed)}/{n_samples}')
     with open(folder + '/x0_solved' + saving_date + '.pkl', 'wb') as file:
         pickle.dump(x0_successes, file)
     with open(folder + '/x0_failed' + saving_date + '.pkl', 'wb') as file:
         pickle.dump(x0_failed, file)
+    print(f'ddq_max = {ddq_max}')
+    print(f'ddx_max = {ddx_max}')

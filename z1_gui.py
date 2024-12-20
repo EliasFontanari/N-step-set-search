@@ -51,7 +51,7 @@ def update_ee(value):
 def create_gui():
     global scale_joints, position_ee
     master = tk.Tk(className='Z1 Robot GUI')
-    scale_joints = ScaleJoints(master, 'Joint', 4, 
+    scale_joints = ScaleJoints(master, 'Joint', n_dofs, 
                                rmodel_red.lowerPositionLimit, 
                                rmodel_red.upperPositionLimit, 
                                np.pi / 2, 300, update_ee)
@@ -71,20 +71,22 @@ def run_visualizer():
         time.sleep(max(0, dt - (time_end - time_start)))
 
 
-params = Parameters('z1')
-n_dofs = 3
+params = Parameters('fr3')
+n_dofs = 9
 robot = adam_model.AdamModel(params,n_dofs=n_dofs)
-description_dir = params.ROBOTS_DIR + 'z1_description'
-rmodel, collision, visual = pinocchio.buildModelsFromUrdf(description_dir + '/urdf/z1.urdf',
+description_dir = params.ROBOTS_DIR + 'fr3_description'
+rmodel, collision, visual = pinocchio.buildModelsFromUrdf(description_dir + '/urdf/fr3.urdf',
                                                     package_dirs=params.ROOT_DIR)
 geom = [collision, visual]
 
 lockIDs = []
-lockNames = ['joint5', 'joint6', 'jointGripper']
+#lockNames = ['joint5', 'joint6', 'jointGripper']
+lockNames = ['fr3_joint5', 'fr3_joint6', 'fr3_joint7', 'fr3_finger_joint1','fr3_finger_joint2']
+lockNames = lockNames[(n_dofs-4):]
 for name in lockNames:
     lockIDs.append(rmodel.getJointId(name))
 
-rmodel_red, geom_red = pinocchio.buildReducedModel(rmodel, geom, lockIDs, np.zeros(7))
+rmodel_red, geom_red = pinocchio.buildReducedModel(rmodel, geom, lockIDs, np.zeros(9))
 rdata = rmodel_red.createData()
 viz = pinocchio.visualize.MeshcatVisualizer(rmodel_red, geom_red[0], geom_red[1])
 viz.initViewer(loadModel=True, open=True)
@@ -100,30 +102,46 @@ viz.viewer['world/obstacle/floor0'].set_property('visible', True)
 T_floor = np.eye(4)
 viz.viewer['world/obstacle/floor0'].set_transform(T_floor)
 
-box1 = meshcat.geometry.Box([2, 2, 1e-3])
-viz.viewer['world/obstacle/floor1'].set_object(box1)
-viz.viewer['world/obstacle/floor1'].set_property('color', [0, 0, 1, 0.5])
-viz.viewer['world/obstacle/floor1'].set_property('visible', True)
-T_floor = np.eye(4)
-T_floor[:3,3] = np.array([0,0,0.6])
-viz.viewer['world/obstacle/floor1'].set_transform(T_floor)
+# box1 = meshcat.geometry.Box([2, 2, 1e-3])
+# viz.viewer['world/obstacle/floor1'].set_object(box1)
+# viz.viewer['world/obstacle/floor1'].set_property('color', [0, 0, 1, 0.5])
+# viz.viewer['world/obstacle/floor1'].set_property('visible', True)
+# T_floor = np.eye(4)
+# T_floor[:3,3] = np.array([0,0,0.6])
+# viz.viewer['world/obstacle/floor1'].set_transform(T_floor)
 
 
-box2 = meshcat.geometry.Box([1e-3, 2, 2])
-viz.viewer['world/obstacle/floor2'].set_object(box2)
-viz.viewer['world/obstacle/floor2'].set_property('color', [0, 0, 1, 0.5])
-viz.viewer['world/obstacle/floor2'].set_property('visible', True)
-T_floor = np.eye(4)
-T_floor[:3,3] = np.array([0.5,0,0])
-viz.viewer['world/obstacle/floor2'].set_transform(T_floor)
+# box2 = meshcat.geometry.Box([1e-3, 2, 2])
+# viz.viewer['world/obstacle/floor2'].set_object(box2)
+# viz.viewer['world/obstacle/floor2'].set_property('color', [0, 0, 1, 0.5])
+# viz.viewer['world/obstacle/floor2'].set_property('visible', True)
+# T_floor = np.eye(4)
+# T_floor[:3,3] = np.array([0.5,0,0])
+# viz.viewer['world/obstacle/floor2'].set_transform(T_floor)
 
-sphere = meshcat.geometry.Sphere(0.05)
+sphere = meshcat.geometry.Sphere(0.12)
 viz.viewer['world/obstacle/sphere'].set_object(sphere)
 viz.viewer['world/obstacle/sphere'].set_property('color',[1, 0, 0, 1])
 viz.viewer['world/obstacle/sphere'].set_property('visible', True)
 T_obs = np.eye(4)
-T_obs[:3, 3] = np.array([0.,0.3,0.15])
+T_obs[:3, 3] = np.array([0.6,0.,0.12])
 viz.viewer['world/obstacle/sphere'].set_transform(T_obs)
+
+# sphere2 = meshcat.geometry.Sphere(0.1)
+# viz.viewer['world/obstacle/sphere2'].set_object(sphere2)
+# viz.viewer['world/obstacle/sphere2'].set_property('color',[1, 0, 0, 1])
+# viz.viewer['world/obstacle/sphere2'].set_property('visible', True)
+# T_obs = np.eye(4)
+# T_obs[:3, 3] = np.array([0.3,-0.35,0.25])
+# viz.viewer['world/obstacle/sphere2'].set_transform(T_obs)
+
+# sphere = meshcat.geometry.Sphere(0.05)
+# viz.viewer['world/obstacle/sphere'].set_object(sphere)
+# viz.viewer['world/obstacle/sphere'].set_property('color',[1, 0, 0, 1])
+# viz.viewer['world/obstacle/sphere'].set_property('visible', True)
+# T_obs = np.eye(4)
+# T_obs[:3, 3] = np.array([0.,0.3,0.15])
+# viz.viewer['world/obstacle/sphere'].set_transform(T_obs)
 
 th_gui = threading.Thread(target=create_gui)
 th_gui.start()
