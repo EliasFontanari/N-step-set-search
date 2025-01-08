@@ -56,7 +56,7 @@ if __name__ == '__main__':
     ddq_max = np.array([0.3,3,5,7])/3
     ddx_max = np.array([0.1, 0.1, 0.1])/0.3
 
-    n_samples = 1000000
+    n_samples = 100000
 
     ee_radius = 0.075
     walls = [

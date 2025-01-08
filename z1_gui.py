@@ -72,7 +72,7 @@ def run_visualizer():
 
 
 params = Parameters('fr3')
-n_dofs = 9
+n_dofs = 7
 robot = adam_model.AdamModel(params,n_dofs=n_dofs)
 description_dir = params.ROBOTS_DIR + 'fr3_description'
 rmodel, collision, visual = pinocchio.buildModelsFromUrdf(description_dir + '/urdf/fr3.urdf',

@@ -32,9 +32,8 @@ class NeuralNetwork(nn.Module):
 
 
 class AdamModel:
-    def __init__(self, params, n_dofs=False):
+    def __init__(self, params, n_dofs=False, not_locked=None):
         self.params = params
-
         # Robot dynamics with Adam (IIT)
         robot = URDF.from_xml_file(params.robot_urdf)
         try:
@@ -44,19 +43,21 @@ class AdamModel:
         except ValueError:
             print(f'\nInvalid number of degrees of freedom! Must be > 1 and <= {len(robot.joints)}\n')
             exit()
-        if (params.urdf_name == 'z1'):
-            robot_joints = robot.joints[1:n_dofs+1]  
-        elif params.urdf_name == 'fr3':
-            robot.joints.pop(0)
-            robot.joints.pop(8-1)
-            robot.joints.pop(9-2)
-            robot.joints.pop(10-3)
-            robot_joints =robot.joints[:n_dofs]
-            
-        else: robot_joints=robot.joints[:n_dofs]
 
+        robot_joints = []
+        #jj=0
+        #while jj < n_dofs:
+        for jointt in robot.joints:
+            if jointt.type != 'fixed':
+                robot_joints.append(jointt)
+                    # jj += 1
+                    # if jj == n_dofs:
+                    #     break
         joint_names = [joint.name for joint in robot_joints]
-        kin_dyn = KinDynComputations(params.robot_urdf, joint_names, robot.get_root())        
+        if not_locked == None:
+            kin_dyn = KinDynComputations(params.robot_urdf, joint_names[:n_dofs], robot.get_root())  
+        else:
+            kin_dyn = KinDynComputations(params.robot_urdf, [joint_names[not_locked]], robot.get_root())     
         kin_dyn.set_frame_velocity_representation(adam.Representations.MIXED_REPRESENTATION)
         self.gravity = kin_dyn.gravity_term_fun()
         self.mass = kin_dyn.mass_matrix_fun()                           # Mass matrix
@@ -66,20 +67,22 @@ class AdamModel:
         self.jac = kin_dyn.jacobian_fun(params.frame_name)
         self.jac_dot = kin_dyn.jacobian_dot_fun(params.frame_name)
 
+        # nq = len(joint_names)
+        nq=n_dofs
 
-        nq = len(joint_names)
+
 
         self.x = MX.sym("x", nq * 2)
         self.x_dot = MX.sym("x_dot", nq * 2)
         self.u = MX.sym("u", nq)
-        self.p = MX.sym("p", 1)      # alpha
+        self.p = MX.sym("p", 1)     # Safety margin for the NN model
         # Double integrator
         self.f_disc = vertcat(
             self.x[:nq] + params.dt * self.x[nq:] + 0.5 * params.dt**2 * self.u,
             self.x[nq:] + params.dt * self.u
         ) 
         self.f_fun = Function('f', [self.x, self.u], [self.f_disc])
-        
+
         self.nx = nq*2
         self.nu = nq
         self.ny = self.nx + self.nu
@@ -110,9 +113,26 @@ class AdamModel:
         joint_lower = np.array([joint.limit.lower for joint in robot_joints])
         joint_upper = np.array([joint.limit.upper for joint in robot_joints])
         joint_velocity = np.array([joint.limit.velocity for joint in robot_joints]) 
-        #joint_effort = np.array([joint.limit.effort for joint in robot_joints]) 
-        joint_effort = np.array([2., 23., 10., 4.])
-        joint_effort = joint_effort[:self.nq]
+
+        if self.params.urdf_name=='z1':
+            joint_effort = np.array([2., 23., 10., 4.])
+        else:
+            joint_effort = np.array([joint.limit.effort for joint in robot_joints])
+            # if self.params.urdf_name=='fr3':
+            #     joint_effort = np.array([1.])
+
+        
+        if not_locked == None:
+            joint_lower=joint_lower[:n_dofs]
+            joint_upper=joint_upper[:n_dofs]
+            joint_velocity=joint_velocity[:n_dofs]
+            joint_effort=joint_effort[:n_dofs]  
+        else:
+            joint_lower=joint_lower[not_locked]
+            joint_upper=joint_upper[not_locked]
+            joint_velocity=joint_velocity[not_locked]
+            joint_effort=joint_effort[not_locked]
+
 
         self.tau_min = - joint_effort
         self.tau_max = joint_effort
@@ -121,6 +141,7 @@ class AdamModel:
 
         # EE target
         self.ee_ref = self.jointToEE(np.zeros(self.nx))
+        self.ee_ref = np.array([0.6, 0.28, 0.078])
 
         # NN model (viability constraint)
         self.l4c_model = None
@@ -130,6 +151,8 @@ class AdamModel:
         # Cartesian constraints
         self.obs_string = '_obs' if params.obs_flag else ''
 
+        self.robot = robot
+        self.joint_names = joint_names
 
     
     def define_problem(self, conf):
