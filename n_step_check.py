@@ -134,8 +134,10 @@ class AccBoundsOCP(NaiveOCP):
             if len(self.obstacles['objects'])>0:
                 for i in self.obstacles['objects']:
                     dist_vec_end = (i['position'])-robot.ee_fun(self.X[-1])
-                    dx_max = cs.sqrt(2*ddx_max*cs.fabs(dist_vec_end)) 
-                    self.opti.subject_to(cs.dot((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:]),dist_vec_end/cs.norm_2(dist_vec_end))<=cs.norm_2(dx_max))
+    #                dx_max = cs.sqrt(cs.fabs(2*cs.dot(ddx_max,cs.fabs(dist_vec_end)))) 
+                    dx_max = np.sqrt(cs.fabs(2*cs.dot(ddx_max, (dist_vec_end/cs.norm_2(dist_vec_end))*cs.norm_2(dist_vec_end))))
+
+                    self.opti.subject_to(cs.dot((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:]),dist_vec_end/cs.norm_2(dist_vec_end))<= dx_max) #cs.fabs(cs.dot(dx_max,dist_vec_end)))  #cs.norm_2(dx_max))
                     #self.opti.subject_to(self.opti.bounded(-dx_max,robot.jac(np.eye(4),self.X[-1][:robot.nq])[:3,6:]@self.X[-1][robot.nq:], dx_max))
 
 
@@ -169,8 +171,9 @@ def check_cartesian_constraint(state, obstacles):
             for i in obstacles['objects']:
                 dist_vec = np.array(i['position'])-robot.ee_fun(state)
                 check = check and (np.linalg.norm(dist_vec)>i['radius'])
-                dx_max = np.sqrt(2*np.multiply(ddx_max,cs.fabs(dist_vec)))  
-                check = check and cs.dot((robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:]),dist_vec/cs.norm_2(dist_vec))<= np.linalg.norm(dx_max)
+                # dx_max = np.sqrt(2*np.multiply(ddx_max,cs.fabs(dist_vec)))  
+                dx_max = np.sqrt(cs.fabs(2*cs.dot(ddx_max, (dist_vec/cs.norm_2(dist_vec))*cs.norm_2(dist_vec))))
+                check = check and cs.dot((robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:]),dist_vec/cs.norm_2(dist_vec))<= dx_max # cs.fabs(cs.dot(dx_max,dist_vec))    #np.linalg.norm(dx_max)
                 #check = check and np.array(- dx_max <= robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:]).all() \
                     #and np.array(robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:]<= dx_max).all()
 
@@ -231,13 +234,26 @@ if __name__ == "__main__":
     now = datetime.datetime.now()
     np.random.seed(now.microsecond*now.second+now.minute) 
 
-    params = parser.Parameters('z1')
-    robot = adam_model.AdamModel(params,n_dofs=4)
+    params = parser.Parameters('fr3')
+    robot = adam_model.AdamModel(params,n_dofs=6)
 
-    ddq_max = np.array([0.3,3,5,7])/3
-    ddx_max = np.array([0.1, 0.1, 0.1])/0.3
+    if robot.params.urdf_name == 'fr3':
+        robot.tau_max = np.array([17,87,8.7*2.3,34.8,2.4*2,4.8])
+        robot.tau_min = -robot.tau_max
+        # robot.tau_max = robot.tau_max/5
+        # robot.tau_min = robot.tau_min/5
+        robot.tau_max = robot.tau_max[:robot.nq]
+        robot.tau_min = robot.tau_min[:robot.nq]
 
-    regularization_sqrt = 1e-6
+
+    # ddq_max = np.array([0.3,3,5,7,7,7])/3
+    ddq_max = np.array([0.17226047, 0.3566412 , 0.27797771, 0.48120222, 1.15786895,
+       2.0])
+    ddq_max = ddq_max[:robot.nq]
+    #ddq_max = np.array([0.3,3,5,7])/5
+    ddx_max = np.array([0.1, 0.1, 0.1])/0.75#/0.3
+    #ddx_max = np.array([0.1, 0.1, 0.1])/0.75
+    regularization_sqrt = 0#1e-4
 
     ee_radius = 0.075
     walls = [
@@ -259,7 +275,7 @@ if __name__ == "__main__":
     #obstacles = None
 
     n_samples=100000
-    max_n_steps = 40
+    max_n_steps = 45
     x0_successes = []
     x0_failed = []
 
@@ -290,11 +306,12 @@ if __name__ == "__main__":
                 #ocp.debug.g_describe(0)
                 #ocp.debug.show_infeasibilities()
                 print(f"Failed in {horizon} steps")
+                if horizon >= 10: horizon +=10
+                else: horizon +=3
                 if horizon >= max_n_steps:
                     x0_failed.append(copy.copy(x0))
                     print(x0)
-            if horizon >= 10: horizon +=10
-            else: horizon +=3
+            
         progress_bar.update(1)
         print(f'number of failures: {len(x0_failed)}')
     progress_bar.close()
@@ -312,3 +329,4 @@ if __name__ == "__main__":
         pickle.dump(x0_failed, file)
     print(f'ddq_max = {ddq_max}')
     print(f'ddx_max = {ddx_max}')
+    print(f'tau_max = {robot.tau_max}')

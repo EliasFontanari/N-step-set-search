@@ -106,11 +106,17 @@ class MaxAccProblem(MinAccProblem):
 if __name__ == "__main__":
     now = datetime.datetime.now()
 
-    params = parser.Parameters('z1')
-    robot = adam_model.AdamModel(params,n_dofs=4)
+    # params = parser.Parameters('z1')
+    # robot = adam_model.AdamModel(params,n_dofs=4)
 
+    params = parser.Parameters('fr3')
+    robot = adam_model.AdamModel(params,n_dofs=6)
 
-    n_samples = 50000 # samples for each joint
+    if robot.params.urdf_name == 'fr3':
+        robot.tau_max = np.array([17,87,8.7,34.8,2.4,4.8])
+        robot.tau_min = -np.array([17,87,8.7,34.8,2.4,4.8])
+
+    n_samples = 10000 # samples for each joint
     acc_max = [[] for _ in range(robot.nq)]
     acc_min = [[] for _ in range(robot.nq)]
     

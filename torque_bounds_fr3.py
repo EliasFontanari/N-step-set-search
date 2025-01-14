@@ -18,6 +18,7 @@ class MaxVelOCP:
         self.nq = model.nq
 
         N = self.params.N
+        Q=1e-2
         opti = cs.Opti()
         x_init = opti.parameter(model.nx)
         vel_dir = opti.parameter(model.nq)
@@ -37,14 +38,14 @@ class MaxVelOCP:
 
         cost = -cs.dot(vel_dir,X[0][self.nq:])
 
-        for k in range(n_steps+1):
-
-            if k < n_steps:
-                # Dynamics constraint
-                opti.subject_to(X[k + 1] == model.f_fun(X[k], U[k]))
-                # Torque constraints
-                opti.subject_to(opti.bounded(model.tau_min, model.tau_fun(X[k], U[k]), model.tau_max))
-        opti.subject_to(X[-1]==X[-2])
+        for k in range(n_steps):
+            # Dynamics constraint
+            opti.subject_to(X[k + 1] == model.f_fun(X[k], U[k]))
+            cost+= Q*(X[k][self.nq:]**2)
+            # Torque constraints
+            opti.subject_to(opti.bounded(model.tau_min, model.tau_fun(X[k], U[k]), model.tau_max))
+        #opti.subject_to(X[-1]==X[-2])
+        opti.subject_to(X[-1][robot.nq:]==cs.MX.zeros(self.nq,1))
 
         self.opti = opti
         self.X = X
@@ -79,20 +80,21 @@ class MaxVelOCP:
 if __name__ == "__main__":
 
     params = parser.Parameters('fr3')
-    not_locked_joint =0
+    not_locked_joint =5
     robot = adam_model.AdamModel(params,n_dofs=1, not_locked=not_locked_joint)
-    horizon_length = 100
-    samples_i = 20
+    horizon_length = 40
+    samples = 80
+    samples_i = int(samples/10)
     samples_f = samples_i
-    samples = 100
     results_angle = []
     results_vel = []
+    plot = False
 
     print(robot.x_min)
     #print(f'inertia {robot.mass(np.eye(4), np.zeros(7))[6:, 6:]}')
     print(f'ee_pos {robot.ee_fun(np.zeros(1*2))}')
 
-    divider = 44
+    divider = 2.5
     robot.tau_max = robot.tau_max/divider
     robot.tau_min = robot.tau_min/divider
 
@@ -115,6 +117,27 @@ if __name__ == "__main__":
             results_angle.append(x0[:robot.nq])
             results_vel.append(sol.value(ocp_form.X[0][robot.nq:]))
             print(sol.value(ocp_form.X[0][robot.nq:]))
+
+            if plot:
+                controls=[]
+                for i in range(horizon_length):
+                    controls.append(np.array(robot.tau_fun(sol.value(ocp_form.X[i]), sol.value(ocp_form.U[i])))[0][0])
+                plt.figure(f'joint{not_locked_joint}, u_max {robot.tau_max}')
+                plt.plot(controls,color='blue')
+                plt.axhline(y=robot.tau_max, color='red', linestyle='--', label='Dashed Line')
+                plt.axhline(y=robot.tau_min, color='red', linestyle='--', label='Dashed Line')
+                vels=[]
+                pos=[]
+                for i in range(horizon_length+1):
+                    vels.append(sol.value(ocp_form.X[i][robot.nq]))
+                    pos.append(sol.value(ocp_form.X[i][0]))
+                plt.figure(f'joint{not_locked_joint}, velocity')
+                plt.plot(vels,color='blue')
+
+                plt.figure(f'position')
+                plt.plot(pos,color='red')
+                plt.hlines([robot.x_min[0],robot.x_max[0]],xmin=0,xmax=len(pos))
+                plt.show()
         except:
             print('Failed')
         
@@ -127,6 +150,26 @@ if __name__ == "__main__":
             results_angle.append(x0[:robot.nq])
             results_vel.append(sol.value(ocp_form.X[0][robot.nq:]))
             print(sol.value(ocp_form.X[0][robot.nq:]))
+            if plot:
+                controls=[]
+                for i in range(horizon_length):
+                    controls.append(np.array(robot.tau_fun(sol.value(ocp_form.X[i]), sol.value(ocp_form.U[i])))[0][0])
+                plt.figure(f'joint{not_locked_joint}, u_max {robot.tau_max}')
+                plt.plot(controls,color='blue')
+                plt.axhline(y=robot.tau_max, color='red', linestyle='--', label='Dashed Line')
+                plt.axhline(y=robot.tau_min, color='red', linestyle='--', label='Dashed Line')
+                vels=[]
+                pos=[]
+                for i in range(horizon_length+1):
+                    vels.append(sol.value(ocp_form.X[i][robot.nq]))
+                    pos.append(sol.value(ocp_form.X[i][0]))
+                plt.figure(f'joint{not_locked_joint}, velocity')
+                plt.plot(vels,color='blue')
+
+                plt.figure(f'position')
+                plt.plot(pos,color='red')
+                plt.hlines([robot.x_min[0],robot.x_max[0]],xmin=0,xmax=len(pos))
+                plt.show()
         except:
             print('Failed')
         progress_bar.update(1)
@@ -135,6 +178,8 @@ if __name__ == "__main__":
     plt.figure(f'joint{not_locked_joint}, u_max {robot.tau_max}')
     plt.title(f'joint{not_locked_joint}, u_max {robot.tau_max}')
     plt.scatter(results_angle, results_vel,color='blue',marker='o')
+    plt.hlines([robot.x_max[1], robot.x_min[1]], robot.x_min[0], robot.x_max[0], colors='red')
+    plt.vlines([robot.x_max[0], robot.x_min[0]], robot.x_min[1], robot.x_max[1], colors='red')
     plt.show()
 
 

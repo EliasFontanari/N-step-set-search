@@ -38,8 +38,9 @@ def check_analytic_set(state, obstacles):
             for i in obstacles['objects']:
                 dist_vec = np.array(i['position'])-robot.ee_fun(state)
                 check = check and (np.linalg.norm(dist_vec)>=i['radius'])
-                dx_max = np.sqrt(2*np.multiply(ddx_max,cs.fabs(dist_vec)))  
-                check = check and cs.dot((robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:]),dist_vec/cs.norm_2(dist_vec))<= np.linalg.norm(dx_max)
+                dx_max = np.sqrt(2*np.multiply(ddx_max,cs.fabs(dist_vec)))
+                dx_max = np.sqrt(cs.fabs(2*cs.dot(ddx_max,cs.fabs(dist_vec))))  
+                check = check and cs.dot((robot.jac(np.eye(4),state[:robot.nq])[:3,6:]@state[robot.nq:]),dist_vec/cs.norm_2(dist_vec))<= dx_max #np.sqrt np.linalg.norm(dx_max)
         return check
     else:
         return check

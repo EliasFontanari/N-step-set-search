@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 
 class AdamModel:
-    def __init__(self, params, n_dofs=7):
+    def __init__(self, params, n_dofs=6):
         self.params = params
         # Robot dynamics with Adam (IIT)
         robot = URDF.from_xml_file(params.robot_urdf)
@@ -128,55 +128,77 @@ class AdamModel:
 
 
 
-class MaxVelOCP:
+class BrakeOCP:
     """ Define OCP problem and solver (IpOpt) """
     def __init__(self, model, n_steps,not_locked):
         self.params = model.params
         self.model = model
         self.nq = model.nq
 
-        N = self.params.N
-        Q_vel = 1e-2
         opti = cs.Opti()
-        x_init = opti.parameter(model.nx)
-        vel_dir = opti.parameter(model.nq)
-        
+        x_init = opti.parameter(model.nx)  
 
+        print(model.tau_max)      
+
+        # # Define decision variables
+        # X, U = [], []
+        # X += [opti.variable(model.nx)]
+        # opti.subject_to(opti.bounded(model.x_min, X[-1], model.x_max))
+        # cost = 0
+        # Q=1e4
+
+        # for k in range(n_steps+1):
+        #     X += [opti.variable(model.nx)]
+        #     opti.subject_to(opti.bounded(model.x_min, X[-1], model.x_max))
+        #     cost += Q*(X[-1][not_locked+robot.nq]**2)
+        #     if k < n_steps+1:
+        #         U += [opti.variable(model.nu)]
+        #         # Dynamics constraint
+        #         opti.subject_to(X[k + 1] == model.f_fun(X[k], U[k]))
+        #         # Torque constraints
+        #         opti.subject_to(opti.bounded(model.tau_min, model.tau_fun(X[k], U[k]), model.tau_max))
+        #     if k < n_steps -1:
+        #         for l in range(model.nq):
+        #             if l != not_locked:
+        #                 opti.subject_to(X[-1][model.nq+l] == 0)
+        # opti.subject_to(X[0] == x_init)
+
+        # # for k in range(n_steps):
+        # #     # Dynamics constraint
+        # #     opti.subject_to(X[k + 1] == model.f_fun(X[k], U[k]))
+        # #     # Torque constraints
+        # #     opti.subject_to(opti.bounded(model.tau_min, model.tau_fun(X[k], U[k]), model.tau_max))
+        
+        # #opti.subject_to(X[-1][model.nq:]==cs.MX.zeros(model.nq,1))
+
+        Q = 1e2
         # Define decision variables
         X, U = [], []
         X += [opti.variable(model.nx)]
-        opti.subject_to(opti.bounded(model.x_min, X[-1], model.x_max))
-        cost = -cs.dot(vel_dir,X[0][self.nq:])
-
+        cost=0
         for k in range(n_steps):
             X += [opti.variable(model.nx)]
+            cost += Q*(X[k][not_locked+robot.nq]**2)
             opti.subject_to(opti.bounded(model.x_min, X[-1], model.x_max))
-            cost += Q_vel * (X[-1][not_locked+robot.nq]**2)
-            if k < n_steps - 1:
-                for l in range(model.nq):
-                    if l != not_locked:
-                        #opti.subject_to(X[-1][model.nq+l] == 0)
-                        opti.subject_to(X[-1][l] == X[-2][l])
             U += [opti.variable(model.nu)]
 
-        opti.subject_to(X[0][:self.nq] == x_init[:self.nq])
-        opti.subject_to(((cs.MX.eye(self.nq)-(vel_dir@vel_dir.T))@X[0][self.nq:])==cs.MX.zeros(self.nq,1))
-        for k in range(n_steps):
-            # Dynamics constraint
-            opti.subject_to(X[k + 1] == model.f_fun(X[k], U[k]))
-            # Torque constraints
-            opti.subject_to(opti.bounded(model.tau_min, model.tau_fun(X[k], U[k]), model.tau_max))
-        
-        #opti.subject_to(X[-1]==X[-2])
-        opti.subject_to(X[-1][robot.nq:]==cs.MX.zeros(self.nq,1))
+        opti.subject_to(X[0] == x_init)
 
-
+        for k in range(n_steps+1):
+            if k < n_steps:
+                # Dynamics constraint
+                opti.subject_to(X[k + 1] == model.f_fun(X[k], U[k]))
+                # Torque constraints
+                opti.subject_to(opti.bounded(model.tau_min, model.tau_fun(X[k], U[k]), model.tau_max))
+                for l in range(model.nq):
+                    if l != not_locked:
+                        opti.subject_to(X[k+1][model.nq+l] == 0)
+        opti.subject_to(X[-1][model.nq:]==cs.MX.zeros(model.nq,1))
 
         self.opti = opti
         self.X = X
         self.U = U
         self.x_init = x_init
-        self.vel_dir = vel_dir
         self.cost = cost
         self.additionalSetting()
         opti.minimize(cost)
@@ -194,7 +216,7 @@ class MaxVelOCP:
             'ipopt.compl_inf_tol': 1e-6,
             #'ipopt.hessian_approximation': 'limited-memory',
             # 'detect_simple_bounds': 'yes',
-            'ipopt.max_iter': 100,
+            'ipopt.max_iter': 1000,
             #'ipopt.linear_solver': 'ma57',
             'ipopt.sb': 'no'
         }
@@ -203,24 +225,12 @@ class MaxVelOCP:
         return opti
 
 if __name__ == "__main__":
-
     params = parser.Parameters('fr3')
-    not_locked_joint =5
+    not_locked_joint =1
     robot = AdamModel(params)
-    horizon_length = 40
-    samples = 80
-    samples_i = int(samples/10)
-    samples_f = samples_i
-    results_angle = []
-    results_vel = []
-    plot = False
-
-    print(robot.x_min)
-    #print(f'inertia {robot.mass(np.eye(4), np.zeros(7))[6:, 6:]}')
-    #print(f'ee_pos {robot.ee_fun(np.zeros(12))}')
-
+    horizon_length = 45
     # torque bound on the studied joint
-    divider = 2.5
+    divider = 1
     robot.tau_max[not_locked_joint]=robot.tau_max[not_locked_joint]/divider
     robot.tau_min[not_locked_joint]=robot.tau_min[not_locked_joint]/divider
     for i in range(len(robot.tau_max)):
@@ -231,104 +241,40 @@ if __name__ == "__main__":
             robot.x_min[i+robot.nq] = robot.x_min[i+robot.nq] *100
             robot.x_max[i] = 100
             robot.x_max[i+robot.nq] = robot.x_max[i+robot.nq] *100
-    robot.tau_max[2] = 19
-    robot.tau_min[2] = -19
-
-
-
-
-    x0_s_i = np.linspace(robot.x_min[not_locked_joint],robot.x_min[not_locked_joint]+0.1,samples_i)
-    x0_s = np.linspace(robot.x_min[not_locked_joint]+0.1,robot.x_max[not_locked_joint]-0.1,samples)
-    x0_s_f = np.linspace(robot.x_max[not_locked_joint]-0.1,robot.x_max[not_locked_joint],samples_f)
-    x0_s=np.hstack((x0_s_i,x0_s,x0_s_f))
 
     x0_full = (robot.x_max + robot.x_min)/2 
     #x0_full[:robot.nq] = np.zeros(robot.nq)
     
     # constrain particular states if needed
-    x0_full[3] = -1.2
-    # x0_full[4] = 0
-    # x0_full[5] = 2.5
-    progress_bar = tqdm.tqdm(total=x0_s.shape[0], desc='Sampling started')
-    for i in range(x0_s.shape[0]):
-        # x0 = (robot.x_max-robot.x_min)*np.random.random_sample((robot.nx,)) + robot.x_min*np.ones((robot.nx,))
-        # x0[:robot.nq] = x0_s[i]
-        x0_init = copy.copy(x0_full)
-        x0_init[not_locked_joint] = x0_s[i]
-        x0_init[not_locked_joint+robot.nq] = ((robot.x_max[not_locked_joint+robot.nq]-robot.x_min[not_locked_joint+robot.nq])*np.random.random_sample((1,)) + robot.x_min[not_locked_joint+robot.nq])[0]
-        vel_direction = x0_init[robot.nq:]/np.linalg.norm(x0_init[robot.nq:])
+    #x0_full[1] = 0.8
+    x0_init = copy.copy(x0_full)
+    x0_init[not_locked_joint] = -1.704 #robot.x_min[not_locked_joint]
+    x0_init[not_locked_joint+robot.nq] = 1.506
 
-        ocp_form= MaxVelOCP(robot,horizon_length,not_locked_joint)
-        ocp = ocp_form.instantiateProblem()
-        ocp.set_value(ocp_form.x_init, x0_init)
-        ocp.set_value(ocp_form.vel_dir, vel_direction)
-        try:
-            sol = ocp.solve()
-            results_angle.append(x0_init[not_locked_joint])
-            results_vel.append(sol.value(ocp_form.X[0][not_locked_joint+robot.nq]))
-            print(sol.value(ocp_form.X[0][not_locked_joint+robot.nq]))
-            print(f'angle to brake: {cs.fabs(sol.value(ocp_form.X[0][not_locked_joint])-sol.value(ocp_form.X[-1][not_locked_joint]))}')
-            if plot:
-                controls=[]
-                for i in range(horizon_length):
-                    controls.append(np.array(robot.tau_fun(sol.value(ocp_form.X[i]), sol.value(ocp_form.U[i]))[not_locked_joint])[0][0])
-                plt.figure(f'joint{not_locked_joint}, u_max {robot.tau_max}')
-                plt.plot(controls,color='blue')
-                plt.axhline(y=robot.tau_max[not_locked_joint], color='red', linestyle='--', label='Dashed Line')
-                plt.axhline(y=robot.tau_min[not_locked_joint], color='red', linestyle='--', label='Dashed Line')
+    ocp_form= BrakeOCP(robot,horizon_length,not_locked_joint)
+    ocp = ocp_form.instantiateProblem()
+    ocp.set_value(ocp_form.x_init, x0_init)
+    try:
+        sol = ocp.solve()
+        print(f'angle to brake: {cs.fabs(sol.value(ocp_form.X[0][not_locked_joint])-sol.value(ocp_form.X[-1][not_locked_joint]))}')
+        print(sol.value(ocp_form.X[-1][not_locked_joint]))
+    except:
+        print('Failed')
 
-                #plt.show()
-
-                vels=[]
-                for i in range(horizon_length+1):
-                    vels.append(sol.value(ocp_form.X[i][not_locked_joint+robot.nq]))
-                plt.figure(f'joint{not_locked_joint}, velocity')
-                plt.plot(vels,color='blue')
-                plt.show()
-        except:
-            print('Failed')
-
-        ocp_form= MaxVelOCP(robot,horizon_length,not_locked_joint)
-        ocp = ocp_form.instantiateProblem()
-        ocp.set_value(ocp_form.x_init, x0_init)
-        ocp.set_value(ocp_form.vel_dir, -vel_direction)
-        try:
-            sol = ocp.solve()
-            results_angle.append(x0_init[not_locked_joint])
-            results_vel.append(sol.value(ocp_form.X[0][not_locked_joint+robot.nq]))
-            print(sol.value(ocp_form.X[0][not_locked_joint+robot.nq]))
-            print(f'angle to brake: {cs.fabs(sol.value(ocp_form.X[0][not_locked_joint])-sol.value(ocp_form.X[-1][not_locked_joint]))}')
-            if plot:
-                controls=[]
-                accelerations = []
-                for i in range(horizon_length):
-                    controls.append(np.array(robot.tau_fun(sol.value(ocp_form.X[i]), sol.value(ocp_form.U[i]))[not_locked_joint])[0][0])
-                    accelerations.append(sol.value(ocp_form.U[i][not_locked_joint]))
-                accelerations.append(0)
-                plt.figure(f'joint{not_locked_joint}, u_max {robot.tau_max}')
-                plt.plot(controls,color='blue')
-                plt.axhline(y=robot.tau_max[not_locked_joint], color='red', linestyle='--', label='Dashed Line')
-                plt.axhline(y=robot.tau_min[not_locked_joint], color='red', linestyle='--', label='Dashed Line')
-
-                #plt.show()
-
-                vels=[]
-                for i in range(horizon_length+1):
-                    vels.append(sol.value(ocp_form.X[i][not_locked_joint+robot.nq]))
-                plt.figure(f'joint{not_locked_joint}, velocity')
-                plt.plot(vels)
-                plt.plot(accelerations)
-                plt.legend(['vel','acc'])
-                plt.show()
-        except:
-            print('Failed')
-        progress_bar.update(1)
-
-    progress_bar.close()
-
+    controls=[]
+    for i in range(horizon_length):
+        controls.append(np.array(robot.tau_fun(sol.value(ocp_form.X[i]), sol.value(ocp_form.U[i]))[not_locked_joint])[0][0])
     plt.figure(f'joint{not_locked_joint}, u_max {robot.tau_max}')
-    plt.title(f'joint{not_locked_joint}, u_max {robot.tau_max}')
-    plt.scatter(results_angle, results_vel,color='blue',marker='o')
-    plt.hlines([robot.x_max[not_locked_joint+robot.nq], robot.x_min[not_locked_joint+robot.nq]], robot.x_min[not_locked_joint], robot.x_max[not_locked_joint], colors='red')
-    plt.vlines([robot.x_max[not_locked_joint], robot.x_min[not_locked_joint]], robot.x_min[not_locked_joint+robot.nq], robot.x_max[not_locked_joint+robot.nq], colors='red')
+    plt.plot(controls,color='blue')
+    plt.axhline(y=robot.tau_max[not_locked_joint], color='red', linestyle='--', label='Dashed Line')
+    plt.axhline(y=robot.tau_min[not_locked_joint], color='red', linestyle='--', label='Dashed Line')
+
+    #plt.show()
+
+    vels=[]
+    for i in range(horizon_length+1):
+        vels.append(sol.value(ocp_form.X[i][not_locked_joint+robot.nq]))
+    plt.figure(f'joint{not_locked_joint}, velocity')
+    plt.plot(vels,color='blue')
     plt.show()
+

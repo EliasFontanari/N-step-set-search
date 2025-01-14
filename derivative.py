@@ -110,8 +110,13 @@ def check_collision(obstacles,state):
     return check
 
 if __name__ == '__main__':
-    params = parser.Parameters('z1')
-    robot = adam_model.AdamModel(params,n_dofs=4)
+    robot_name = 'fr3'
+    dof = 6
+    params = parser.Parameters(robot_name)
+    robot = adam_model.AdamModel(params,n_dofs=dof)
+    if robot.params.urdf_name == 'fr3':
+        robot.tau_max = np.array([17,87,8.7,34.8,2.4,4.8])
+        robot.tau_min = -np.array([17,87,8.7,34.8,2.4,4.8])
     nq = robot.nq
 
     max_steps = 500
@@ -136,20 +141,24 @@ if __name__ == '__main__':
     obstacles = {'walls':walls,'objects':objects}
 
     data_folder = os.path.join(os.getcwd(),'N-steps results') 
-    x0_s = load(os.path.join(data_folder,'x0_failed2024-12-19 11:48:49.644658.pkl'))
+    x0_s = load(os.path.join(data_folder,'x0_failed2025-01-13 09:00:07.809522.pkl'))
 
 
-    description_dir = params.ROBOTS_DIR + 'z1_description'
-    rmodel, collision, visual = pin.buildModelsFromUrdf(description_dir + '/urdf/z1.urdf',
+    description_dir = params.ROBOTS_DIR + f'{robot_name}_description'
+    rmodel, collision, visual = pin.buildModelsFromUrdf(description_dir + f'/urdf/{robot_name}.urdf',
                                                         package_dirs=params.ROOT_DIR)
     geom = [collision, visual]
 
     lockIDs = []
-    lockNames = ['joint5', 'joint6', 'jointGripper']
+    if robot_name == 'z1':
+        lockNames = ['joint5', 'joint6', 'jointGripper']
+    if robot_name == 'fr3':
+        lockNames = ['fr3_joint5', 'fr3_joint6', 'fr3_joint7', 'fr3_finger_joint1','fr3_finger_joint2']
+        lockNames = lockNames[(dof-4):]
     for name in lockNames:
         lockIDs.append(rmodel.getJointId(name))
 
-    rmodel_red, geom_red = pin.buildReducedModel(rmodel, geom, lockIDs, np.zeros(7))
+    rmodel_red, geom_red = pin.buildReducedModel(rmodel, geom, lockIDs, np.zeros(9 if robot_name == 'fr3' else 'z1'))
 
     viz = pin.visualize.MeshcatVisualizer(rmodel_red, geom_red[0], geom_red[1])
     viz.initViewer(loadModel=True, open=True)
@@ -189,12 +198,15 @@ if __name__ == '__main__':
         print(robot.ee_fun(x0_s[i]))
         if (render:=True):
             for j in range(x_simu.shape[1]):
-                if not(check_collision(obstacles,x_simu[:,k])):
+                if not(check_collision(obstacles,x_simu[:,j])):
                     print('Collision')
                     viz.display(x_simu[:nq,j])
                     time.sleep(5)
                     break
                 viz.display(x_simu[:nq,j])
-                time.sleep((1/20)/5)
+                time.sleep((1/5))
+                print(j)
+                if np.linalg.norm(x_simu[:,j]-x_simu[:,j-1]) < 1e-4:
+                    break
 
         

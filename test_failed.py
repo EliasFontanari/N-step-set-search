@@ -178,13 +178,27 @@ if __name__ == "__main__":
     saving_date = str(datetime.datetime.now())
     np.random.seed(now.microsecond*now.second+now.minute) 
 
-    params = parser.Parameters('z1')
-    robot = adam_model.AdamModel(params,n_dofs=4)
+    params = parser.Parameters('fr3')
+    robot = adam_model.AdamModel(params,n_dofs=6)
 
-    ddq_max = np.array([0.3,3,5,7])/3
-    ddx_max = np.array([0.1, 0.1, 0.1])/0.1
+    if robot.params.urdf_name == 'fr3':
+        robot.tau_max = np.array([17*1.5,87,8.7*2.2,34.8,4.8,4.8])
+        robot.tau_min = -robot.tau_max
+        # robot.tau_max = robot.tau_max/5
+        # robot.tau_min = robot.tau_min/5
+        robot.tau_max = robot.tau_max[:robot.nq]
+        robot.tau_min = robot.tau_min[:robot.nq]
 
-    regularization_sqrt = 1e-6
+
+    # ddq_max = np.array([0.3,3,5,7,7,7])/3
+    ddq_max = np.array([0.17226047, 0.3566412 , 0.27797771, 0.48120222, 1.15786895,
+       2.47659424])
+    ddq_max = ddq_max[:robot.nq]
+
+    ddx_max = np.array([0.1, 0.1, 0.05])
+
+
+    regularization_sqrt = 1e-4*0
 
     ee_radius = 0.075
     walls = [
@@ -206,21 +220,21 @@ if __name__ == "__main__":
     #obstacles = None
 
     n_samples=10000
-    max_n_steps = 300
+    max_n_steps = 300*3
     x0_successes = []
     x0_failed = []
 
     print(f'joint bounds = {robot.x_min} , {robot.x_max} ')
 
     data_folder = os.path.join(os.getcwd(),'N-steps results') 
-    x0_s = load(os.path.join(data_folder,'x0_failed2024-12-19 11:48:49.644658.pkl'))
+    x0_s = load(os.path.join(data_folder,'x0_failed2025-01-13 09:00:07.809522.pkl'))
 
     progress_bar = tqdm.tqdm(total=len(x0_s), desc='Progress')
-    for k in range(len(x0_s)):
+    for k in range(0,len(x0_s)):
         for j in range(1):
             x0=perturbate_init(x0_s[k],1e-4*j)
             print(f'{k} : {x0_s[k]}')
-            horizon = 50
+            horizon = 100
             while horizon <= max_n_steps:
                 ocp_form= AccBoundsOCP(robot,horizon,ddq_max,obstacles)
                 ocp = ocp_form.instantiateProblem()
@@ -238,7 +252,7 @@ if __name__ == "__main__":
                     if horizon >= max_n_steps:
                         x0_failed.append(x0)
                         print(x0)
-                if horizon >= 100: horizon +=50
+                if horizon >= 100: horizon +=300
                 else: horizon += 25
         progress_bar.update(1)
     progress_bar.close()
