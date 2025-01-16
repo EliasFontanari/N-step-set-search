@@ -231,8 +231,8 @@ if __name__ == "__main__":
             robot.x_min[i+robot.nq] = robot.x_min[i+robot.nq] *100
             robot.x_max[i] = 100
             robot.x_max[i+robot.nq] = robot.x_max[i+robot.nq] *100
-    robot.tau_max[2] = 19
-    robot.tau_min[2] = -19
+    robot.tau_max[0] = 17
+    robot.tau_min[0] = -17
 
 
 
@@ -246,7 +246,7 @@ if __name__ == "__main__":
     #x0_full[:robot.nq] = np.zeros(robot.nq)
     
     # constrain particular states if needed
-    x0_full[3] = -1.2
+    x0_full[1] = 1.5
     # x0_full[4] = 0
     # x0_full[5] = 2.5
     progress_bar = tqdm.tqdm(total=x0_s.shape[0], desc='Sampling started')

@@ -118,20 +118,20 @@ class AccBoundsOCP(NaiveOCP):
 
         # dq_min = - self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
         # dq_max = self.X[-1][nq:] ** 2 / ddq_max + self.X[-1][:nq]
-        dq_min = -cs.sqrt(2*ddq_max[:nq]*(self.X[-1][:nq]-self.model.x_min[:nq])+regularization_sqrt)
-        dq_max = cs.sqrt(2*ddq_max[:nq]*(self.model.x_max[:nq]-self.X[-1][:nq])+regularization_sqrt)
+        dq_min = 2*ddq_max[:nq]*(self.X[-1][:nq]-self.model.x_min[:nq])
+        dq_max = 2*ddq_max[:nq]*(self.model.x_max[:nq]-self.X[-1][:nq])
         
         self.opti.set_initial(self.X[-1],x0)
         # self.opti.subject_to(cs.fmax(dq_min,cs.MX.ones(nq,1)*regularization_sqrt) <= self.X[-1][nq:])
         # self.opti.subject_to(cs.fmax(dq_max,cs.MX.ones(nq,1)*regularization_sqrt) >= self.X[-1][nq:])
-        self.opti.subject_to(dq_min <= self.X[-1][nq:])
-        self.opti.subject_to(dq_max >= self.X[-1][nq:])
+        self.opti.subject_to(ReLu(-self.X[-1][nq:])**2<=dq_min)
+        self.opti.subject_to(ReLu(self.X[-1][nq:])**2<=dq_max)
         if self.obstacles != None:
             if len(self.obstacles['walls'])>0:
                 for i in self.obstacles['walls']:
                     distance= i['pos'] - robot.ee_fun(self.X[-1])[i['axis']]
-                    dx_max = cs.sqrt(2*ddx_max[i['axis']]*cs.fabs(distance)+regularization_sqrt)   #  [i['axis']]
-                    self.opti.subject_to(((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:])[i['axis']])*cs.sign(distance) <= dx_max)
+                    dx_max = 2*ddx_max[i['axis']]*cs.fabs(distance)   #  [i['axis']]
+                    self.opti.subject_to(ReLu(((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:])[i['axis']])*cs.sign(distance))**2 <= dx_max)
                     #dx_max = cs.sqrt(2*ddx_max[i['axis']]*cs.fabs(robot.ee_fun(self.X[-1])[i['axis']]- i['pos']))   #  [i['axis']]
                     #self.opti.subject_to(self.opti.bounded(-dx_max,    (robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:]) [i['axis']],    dx_max))
             if len(self.obstacles['objects'])>0:
@@ -139,10 +139,10 @@ class AccBoundsOCP(NaiveOCP):
                     dist_vec_end = (i['position'])-robot.ee_fun(self.X[-1])
     #                dx_max = cs.sqrt(cs.fabs(2*cs.dot(ddx_max,cs.fabs(dist_vec_end)))) 
                     #dx_max = np.sqrt(cs.fabs(2*cs.dot(ddx_max, (dist_vec_end/cs.norm_2(dist_vec_end))*cs.norm_2(dist_vec_end))))
-                    dx_max = cs.sqrt(cs.dot(2*ddx_max,cs.fabs(dist_vec_end+regularization_sqrt))) #np.sqrt(cs.fabs(cs.dot(2*self.model.ddx_max, (dist_vec_end/cs.norm_2(dist_vec_end))*cs.norm_2(dist_vec_end))))
+                    dx_max = cs.dot(2*ddx_max,cs.fabs(dist_vec_end+regularization_sqrt)) #np.sqrt(cs.fabs(cs.dot(2*self.model.ddx_max, (dist_vec_end/cs.norm_2(dist_vec_end))*cs.norm_2(dist_vec_end))))
 
 
-                    self.opti.subject_to(cs.dot((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:]),dist_vec_end/cs.norm_2(dist_vec_end))<= dx_max) #cs.fabs(cs.dot(dx_max,dist_vec_end)))  #cs.norm_2(dx_max))
+                    self.opti.subject_to(ReLu(cs.dot((robot.jac(np.eye(4),self.X[-1][:nq])[:3,6:]@self.X[-1][nq:]),dist_vec_end/cs.norm_2(dist_vec_end)))**2<= dx_max) #cs.fabs(cs.dot(dx_max,dist_vec_end)))  #cs.norm_2(dx_max))
                     #self.opti.subject_to(self.opti.bounded(-dx_max,robot.jac(np.eye(4),self.X[-1][:robot.nq])[:3,6:]@self.X[-1][robot.nq:], dx_max))
 
 
@@ -255,7 +255,7 @@ if __name__ == "__main__":
 
     # ddq_max = np.array([0.3,3,5,7,7,7])/3
     ddq_max = np.array([0.17226047, 0.3566412 , 0.27797771, 0.48120222, 1.15786895,
-       2.0])
+       2.0])*3
     ddq_max = ddq_max[:robot.nq]
     #ddq_max = np.array([0.3,3,5,7])/5
     ddx_max = np.array([0.1, 0.1, 0.1])/0.75#/0.3
